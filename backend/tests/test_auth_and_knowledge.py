@@ -69,4 +69,3 @@ def test_duplicate_knowledge_base_name_returns_conflict(
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "knowledge_base_exists"
-

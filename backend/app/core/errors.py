@@ -47,4 +47,3 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
         status_code=422,
         content=error_payload(request, "validation_error", "请求参数不合法", details),
     )
-

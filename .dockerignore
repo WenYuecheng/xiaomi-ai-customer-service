@@ -1,0 +1,12 @@
+.git
+.env
+.venv
+backend/.venv
+frontend/node_modules
+frontend/dist
+data/uploads
+data/chroma
+data/models
+__pycache__
+*.pyc
+

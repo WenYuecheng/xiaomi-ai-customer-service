@@ -40,16 +40,23 @@ def load_sections(path: Path) -> list[ParsedSection]:
     raise ValueError(f"unsupported document suffix: {suffix}")
 
 
-PRODUCT_MODEL_PATTERN = re.compile(
-    r"(?:小米|红米|Redmi|米家)\s*[A-Za-z]*\s*\d+(?:\s*(?:Pro|Ultra|Max))?",
-    re.IGNORECASE,
+PRODUCT_MODEL_PATTERNS = (
+    re.compile(r"(?:小米|Xiaomi)\s*(\d+(?:\s*(?:Pro|Ultra|Max))?)", re.IGNORECASE),
+    re.compile(r"(?:红米|Redmi)\s*([A-Za-z]*\s*\d+(?:\s*(?:Pro|Ultra|Max))?)", re.IGNORECASE),
+    re.compile(r"Smart\s+Band\s*(\d+(?:\s*Pro)?)", re.IGNORECASE),
+    re.compile(r"Robot\s+Vacuum\s*(\d+(?:\s*Pro)?)", re.IGNORECASE),
+    re.compile(r"\b([TX]\d+(?:\s*Pro)?)\b", re.IGNORECASE),
 )
 
 
 def extract_product_models(text: str) -> list[str]:
-    return sorted(
-        {re.sub(r"\s+", " ", match).strip() for match in PRODUCT_MODEL_PATTERN.findall(text)}
-    )
+    models: set[str] = set()
+    labels = ("小米", "红米", "Smart Band", "Robot Vacuum", "")
+    for pattern, label in zip(PRODUCT_MODEL_PATTERNS, labels, strict=True):
+        for match in pattern.findall(text):
+            suffix = re.sub(r"\s+", " ", match).strip()
+            models.add(f"{label} {suffix}".strip().lower())
+    return sorted(models)
 
 
 def split_sections(
@@ -58,7 +65,16 @@ def split_sections(
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
-        separators=["\n# ", "\n## ", "\n\n", "\n", "。", "；", "，", "",],
+        separators=[
+            "\n# ",
+            "\n## ",
+            "\n\n",
+            "\n",
+            "。",
+            "；",
+            "，",
+            "",
+        ],
     )
     chunks: list[tuple[str, str, list[str]]] = []
     for section in sections:

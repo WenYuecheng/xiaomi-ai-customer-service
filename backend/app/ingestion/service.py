@@ -42,6 +42,12 @@ def process_job(
             chunks_data = split_sections(sections, document.chunk_size, document.chunk_overlap)
             if not chunks_data:
                 raise ValueError("文档切分结果为空")
+            old_chunk_ids = list(
+                session.scalars(
+                    select(DocumentChunk.id).where(DocumentChunk.document_id == document.id)
+                )
+            )
+            vector_store.delete_chunks(document.knowledge_base_id, old_chunk_ids)
             session.execute(delete(DocumentChunk).where(DocumentChunk.document_id == document.id))
             chunks = [
                 DocumentChunk(

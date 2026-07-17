@@ -63,4 +63,3 @@ class FeedbackResponse(BaseModel):
     message_id: str
     rating: str
     correction: str | None
-

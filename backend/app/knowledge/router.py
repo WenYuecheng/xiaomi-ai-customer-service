@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from app.auth.dependencies import AdminOrOperatorDep, CurrentUserDep
 from app.core.errors import AppError
@@ -12,9 +13,17 @@ from app.knowledge.schemas import (
     KnowledgeBaseCreate,
     KnowledgeBaseList,
     KnowledgeBaseResponse,
+    KnowledgeBaseUpdate,
 )
 
 router = APIRouter(prefix="/knowledge-bases", tags=["knowledge-bases"])
+
+
+def require_knowledge_base(session: Session, knowledge_base_id: str) -> KnowledgeBase:
+    item = session.get(KnowledgeBase, knowledge_base_id)
+    if not item:
+        raise AppError(404, "knowledge_base_not_found", "知识库不存在")
+    return item
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -62,3 +71,41 @@ def list_knowledge_bases(
         total=session.scalar(count_statement) or 0,
     )
 
+
+@router.get("/{knowledge_base_id}")
+def get_knowledge_base(
+    knowledge_base_id: str, session: SessionDep, _current_user: CurrentUserDep
+) -> KnowledgeBaseResponse:
+    return KnowledgeBaseResponse.model_validate(require_knowledge_base(session, knowledge_base_id))
+
+
+@router.patch("/{knowledge_base_id}")
+def update_knowledge_base(
+    knowledge_base_id: str,
+    payload: KnowledgeBaseUpdate,
+    session: SessionDep,
+    _current_user: AdminOrOperatorDep,
+) -> KnowledgeBaseResponse:
+    item = require_knowledge_base(session, knowledge_base_id)
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(item, field, value.strip() if isinstance(value, str) else value)
+    try:
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        raise AppError(409, "knowledge_base_exists", "知识库名称已存在") from exc
+    session.refresh(item)
+    return KnowledgeBaseResponse.model_validate(item)
+
+
+@router.delete("/{knowledge_base_id}", status_code=204)
+def delete_knowledge_base(
+    knowledge_base_id: str,
+    session: SessionDep,
+    _current_user: AdminOrOperatorDep,
+) -> None:
+    item = require_knowledge_base(session, knowledge_base_id)
+    if item.documents:
+        raise AppError(409, "knowledge_base_not_empty", "请先删除知识库中的文档")
+    session.delete(item)
+    session.commit()

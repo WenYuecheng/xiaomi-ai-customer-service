@@ -9,6 +9,12 @@ class KnowledgeBaseCreate(BaseModel):
     embedding_model: str = Field(default="mock-hash-embedding", max_length=100)
 
 
+class KnowledgeBaseUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    description: str | None = Field(default=None, max_length=2000)
+    status: str | None = Field(default=None, pattern="^(active|archived)$")
+
+
 class KnowledgeBaseResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -24,4 +30,3 @@ class KnowledgeBaseResponse(BaseModel):
 class KnowledgeBaseList(BaseModel):
     items: list[KnowledgeBaseResponse]
     total: int
-

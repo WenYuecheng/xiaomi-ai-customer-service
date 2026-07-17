@@ -1,4 +1,5 @@
 .DS_Store
+.idea/
 .env
 .venv/
 .pytest_cache/
@@ -12,6 +13,10 @@ htmlcov/
 backend/.python-version
 frontend/node_modules/
 frontend/dist/
+frontend/src/**/*.js
+frontend/*.js
+frontend/*.d.ts
+frontend/*.tsbuildinfo
 data/uploads/*
 !data/uploads/.gitkeep
 data/chroma/*
@@ -20,4 +25,3 @@ data/models/*
 !data/models/.gitkeep
 data/logs/*
 !data/logs/.gitkeep
-

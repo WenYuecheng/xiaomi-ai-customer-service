@@ -4,14 +4,14 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import Settings
 from app.ingestion.service import next_queued_job, process_job, recover_interrupted_jobs
-from app.rag.vector_store import VectorStoreService
+from app.rag.vector_store import VectorStoreService, create_embeddings
 
 
 class JobWorker:
     def __init__(self, session_factory: sessionmaker[Session], settings: Settings) -> None:
         self.session_factory = session_factory
         self.settings = settings
-        self.vector_store = VectorStoreService(settings.chroma_dir)
+        self.vector_store = VectorStoreService(settings.chroma_dir, create_embeddings(settings))
         self._stop = Event()
         self._wake = Event()
         self._thread = Thread(target=self._run, name="document-worker", daemon=True)
@@ -36,4 +36,3 @@ class JobWorker:
                 continue
             self._wake.wait(timeout=0.25)
             self._wake.clear()
-

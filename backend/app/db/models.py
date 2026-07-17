@@ -85,9 +85,7 @@ class Document(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    knowledge_base_id: Mapped[str] = mapped_column(
-        ForeignKey("knowledge_bases.id"), index=True
-    )
+    knowledge_base_id: Mapped[str] = mapped_column(ForeignKey("knowledge_bases.id"), index=True)
     original_filename: Mapped[str] = mapped_column(String(255))
     stored_filename: Mapped[str] = mapped_column(String(255), unique=True)
     media_type: Mapped[str] = mapped_column(String(100))
@@ -235,3 +233,45 @@ class BehaviorEvent(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, index=True
     )
+
+
+class MockOrder(Base):
+    __tablename__ = "mock_orders"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    order_no: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    product_name: Mapped[str] = mapped_column(String(200))
+    payment_status: Mapped[str] = mapped_column(String(50))
+    shipping_status: Mapped[str] = mapped_column(String(50))
+    logistics: Mapped[list[str]] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Ticket(Base):
+    __tablename__ = "tickets"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    conversation_id: Mapped[str] = mapped_column(ForeignKey("conversations.id"), index=True)
+    category: Mapped[str] = mapped_column(String(50), default="customer_service")
+    product_model: Mapped[str | None] = mapped_column(String(100))
+    summary: Mapped[str] = mapped_column(Text)
+    attempted_solution: Mapped[str | None] = mapped_column(Text)
+    priority: Mapped[str] = mapped_column(String(20), default="normal")
+    status: Mapped[str] = mapped_column(String(20), default="open", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class RecommendationTrainingRun(Base):
+    __tablename__ = "recommendation_training_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    version: Mapped[str] = mapped_column(String(50), unique=True)
+    status: Mapped[str] = mapped_column(String(20), default="running")
+    precision_at_k: Mapped[float | None] = mapped_column(Float)
+    recall_at_k: Mapped[float | None] = mapped_column(Float)
+    artifact_filename: Mapped[str | None] = mapped_column(String(255))
+    failure_examples: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -4,16 +4,24 @@ from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, File, Form, Request, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from app.auth.dependencies import AdminOrOperatorDep
 from app.core.errors import AppError
 from app.db.base import SessionDep
-from app.db.models import Document, DocumentChunk, KnowledgeBase, ProcessingJob
+from app.db.models import (
+    Document,
+    DocumentChunk,
+    DocumentStatus,
+    KnowledgeBase,
+    ProcessingJob,
+)
 from app.ingestion.schemas import (
     ChunkList,
     ChunkResponse,
+    DocumentList,
     DocumentResponse,
     JobResponse,
     UploadResponse,
@@ -113,6 +121,24 @@ def get_document(
     return DocumentResponse.model_validate(document)
 
 
+@router.get("/documents")
+def list_documents(
+    session: SessionDep,
+    _current_user: AdminOrOperatorDep,
+    knowledge_base_id: str | None = None,
+) -> DocumentList:
+    statement = select(Document)
+    count_statement = select(func.count()).select_from(Document)
+    if knowledge_base_id:
+        statement = statement.where(Document.knowledge_base_id == knowledge_base_id)
+        count_statement = count_statement.where(Document.knowledge_base_id == knowledge_base_id)
+    documents = list(session.scalars(statement.order_by(Document.created_at.desc())))
+    return DocumentList(
+        items=[DocumentResponse.model_validate(document) for document in documents],
+        total=session.scalar(count_statement) or 0,
+    )
+
+
 @router.get("/documents/{document_id}/chunks")
 def list_chunks(
     document_id: str, session: SessionDep, _current_user: AdminOrOperatorDep
@@ -139,6 +165,48 @@ def get_job(job_id: str, session: SessionDep, _current_user: AdminOrOperatorDep)
     return JobResponse.model_validate(job)
 
 
+def queue_document_job(
+    request: Request, session: Session, document: Document, operation: str
+) -> UploadResponse:
+    if document.status.value == "processing":
+        raise AppError(409, "document_busy", "文档正在处理中")
+    job = ProcessingJob(document_id=document.id, operation=operation)
+    document.status = DocumentStatus.queued
+    document.error_message = None
+    session.add(job)
+    session.commit()
+    request.app.state.worker.notify()
+    return UploadResponse(document_id=document.id, job_id=job.id, status=job.status)
+
+
+@router.post("/documents/{document_id}/reindex", status_code=202)
+def reindex_document(
+    request: Request,
+    document_id: str,
+    session: SessionDep,
+    _current_user: AdminOrOperatorDep,
+) -> UploadResponse:
+    document = session.get(Document, document_id)
+    if not document:
+        raise AppError(404, "document_not_found", "文档不存在")
+    return queue_document_job(request, session, document, "reindex")
+
+
+@router.post("/jobs/{job_id}/retry", status_code=202)
+def retry_job(
+    request: Request,
+    job_id: str,
+    session: SessionDep,
+    _current_user: AdminOrOperatorDep,
+) -> UploadResponse:
+    job = session.get(ProcessingJob, job_id)
+    if not job:
+        raise AppError(404, "job_not_found", "处理任务不存在")
+    if job.status.value != "failed":
+        raise AppError(409, "job_not_failed", "仅失败任务可以重试")
+    return queue_document_job(request, session, job.document, f"retry:{job.operation}")
+
+
 @router.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_document(
     request: Request,
@@ -156,4 +224,3 @@ def delete_document(
     (request.app.state.settings.upload_dir / document.stored_filename).unlink(missing_ok=True)
     session.delete(document)
     session.commit()
-

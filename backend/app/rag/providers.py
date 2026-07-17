@@ -59,4 +59,3 @@ def create_chat_provider(settings: Settings) -> ChatProvider:
             temperature=0,
         )
     )
-

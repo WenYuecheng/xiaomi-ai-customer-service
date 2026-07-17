@@ -12,4 +12,3 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         response.headers["x-request-id"] = request_id
         return response
-

@@ -5,6 +5,10 @@ from pathlib import Path
 from langchain_chroma import Chroma
 from langchain_core.documents import Document as LangChainDocument
 from langchain_core.embeddings import Embeddings
+from langchain_ollama import OllamaEmbeddings
+from langchain_openai import OpenAIEmbeddings
+
+from app.core.config import Settings
 
 
 class HashEmbeddings(Embeddings):
@@ -30,6 +34,42 @@ class HashEmbeddings(Embeddings):
 
     def embed_query(self, text: str) -> list[float]:
         return self._embed(text)
+
+
+class BgeEmbeddings(Embeddings):
+    """Lazy local BGE adapter so default installs stay lightweight."""
+
+    def __init__(self, model_name: str) -> None:
+        try:
+            from sentence_transformers import SentenceTransformer
+        except ImportError as exc:
+            raise RuntimeError("BGE embeddings require: uv sync --extra local-embeddings") from exc
+        self.model = SentenceTransformer(model_name)
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return self.model.encode(texts, normalize_embeddings=True).tolist()
+
+    def embed_query(self, text: str) -> list[float]:
+        return self.embed_documents([text])[0]
+
+
+def create_embeddings(settings: Settings) -> Embeddings:
+    if settings.embedding_provider == "mock":
+        return HashEmbeddings()
+    if settings.embedding_provider == "openai":
+        if not settings.openai_api_key:
+            raise RuntimeError("OPENAI_API_KEY is required for OpenAI embeddings")
+        return OpenAIEmbeddings(
+            model=settings.embedding_model,
+            api_key=settings.openai_api_key,
+            base_url=settings.openai_base_url,
+        )
+    if settings.embedding_provider == "ollama":
+        return OllamaEmbeddings(
+            model=settings.embedding_model,
+            base_url=settings.ollama_base_url,
+        )
+    return BgeEmbeddings(settings.embedding_model)
 
 
 class VectorStoreService:
@@ -66,4 +106,3 @@ class VectorStoreService:
     def delete_chunks(self, knowledge_base_id: str, chunk_ids: list[str]) -> None:
         if chunk_ids:
             self.collection(knowledge_base_id).delete(ids=chunk_ids)
-

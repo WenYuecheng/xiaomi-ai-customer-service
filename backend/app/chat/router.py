@@ -31,7 +31,9 @@ def build_chat_response(conversation, message, sources, run_id: str) -> ChatResp
         answer=message.content,
         sources=[SourceResponse.model_validate(source) for source in sources],
         fallback=message.fallback,
-        transfer_suggested=conversation.consecutive_fallbacks >= 2,
+        transfer_suggested=(
+            conversation.consecutive_fallbacks >= 2 or message.intent == "human_transfer"
+        ),
     )
 
 
@@ -88,9 +90,7 @@ def chat_completion(
 
 
 @router.post("/chat/runs/{run_id}/cancel")
-def cancel_run(
-    request: Request, run_id: str, _current_user: CurrentUserDep
-) -> dict[str, bool]:
+def cancel_run(request: Request, run_id: str, _current_user: CurrentUserDep) -> dict[str, bool]:
     request.app.state.cancelled_runs.add(run_id)
     return {"cancelled": True}
 

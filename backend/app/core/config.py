@@ -36,6 +36,14 @@ class Settings(BaseSettings):
     similarity_threshold: float = Field(default=0.25, ge=0, le=1)
     chunk_size: int = Field(default=800, ge=200, le=4000)
     chunk_overlap: int = Field(default=120, ge=0, le=800)
+    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    sensitive_words: list[str] = Field(default_factory=lambda: ["支付密码", "银行卡密码"])
+    initial_admin_username: str = "admin"
+    initial_admin_password: str | None = None
+    initial_operator_username: str = "operator"
+    initial_operator_password: str | None = None
+    initial_user_username: str = "customer"
+    initial_user_password: str | None = None
 
     @field_validator("api_prefix")
     @classmethod
@@ -54,4 +62,3 @@ def get_settings() -> Settings:
     settings = Settings()
     settings.validate_runtime_secrets()
     return settings
-

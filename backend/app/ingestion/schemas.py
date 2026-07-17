@@ -29,6 +29,11 @@ class DocumentResponse(BaseModel):
     created_at: datetime
 
 
+class DocumentList(BaseModel):
+    items: list[DocumentResponse]
+    total: int
+
+
 class ChunkResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -57,4 +62,3 @@ class JobResponse(BaseModel):
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
-

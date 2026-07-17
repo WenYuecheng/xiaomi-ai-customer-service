@@ -115,3 +115,66 @@ def test_streaming_chat_emits_contract_events(client: TestClient, users: dict[st
     assert "event: done" in text
     assert text.index("event: meta") < text.index("event: delta") < text.index("event: sources")
 
+
+def test_follow_up_rewrite_keeps_product_context(client: TestClient, users: dict[str, str]) -> None:
+    operator_headers = auth_headers(client, "operator", users["operator"])
+    knowledge_base_id = prepare_knowledge(client, operator_headers)
+    user_headers = auth_headers(client, "customer", users["customer"])
+    first = client.post(
+        "/api/v1/chat/completions",
+        headers=user_headers,
+        json={"knowledge_base_id": knowledge_base_id, "message": "小米 14 怎么样？"},
+    ).json()
+
+    follow_up = client.post(
+        "/api/v1/chat/completions",
+        headers=user_headers,
+        json={
+            "knowledge_base_id": knowledge_base_id,
+            "conversation_id": first["conversation_id"],
+            "message": "它的充电功率是多少？",
+        },
+    )
+
+    assert follow_up.status_code == 200
+    assert follow_up.json()["fallback"] is False
+    assert "90W" in follow_up.json()["answer"]
+
+
+def test_explicit_human_transfer_is_suggested_immediately(
+    client: TestClient, users: dict[str, str]
+) -> None:
+    operator_headers = auth_headers(client, "operator", users["operator"])
+    knowledge_base_id = prepare_knowledge(client, operator_headers)
+    user_headers = auth_headers(client, "customer", users["customer"])
+
+    response = client.post(
+        "/api/v1/chat/completions",
+        headers=user_headers,
+        json={"knowledge_base_id": knowledge_base_id, "message": "请转人工客服"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["transfer_suggested"] is True
+    assert response.json()["fallback"] is False
+
+
+def test_sensitive_credentials_are_blocked_and_audited(
+    client: TestClient, users: dict[str, str]
+) -> None:
+    operator_headers = auth_headers(client, "operator", users["operator"])
+    knowledge_base_id = prepare_knowledge(client, operator_headers)
+    user_headers = auth_headers(client, "customer", users["customer"])
+
+    response = client.post(
+        "/api/v1/chat/completions",
+        headers=user_headers,
+        json={"knowledge_base_id": knowledge_base_id, "message": "我的支付密码是 123456"},
+    )
+    audit = client.get("/api/v1/operations/audit", headers=operator_headers)
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "sensitive_input"
+    assert audit.status_code == 200
+    assert audit.json()[0]["event_type"] == "audit:blocked_input"
+    assert "123456" not in str(audit.json()[0]["payload"])

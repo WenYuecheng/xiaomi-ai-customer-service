@@ -28,4 +28,3 @@ def authenticate(session: Session, username: str, password: str) -> User:
     if not user or not user.is_active or not verify_password(password, user.password_hash):
         raise AppError(401, "invalid_credentials", "用户名或密码错误")
     return user
-

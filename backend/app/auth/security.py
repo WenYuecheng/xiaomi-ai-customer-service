@@ -48,4 +48,3 @@ def decode_access_token(token: str, settings: Settings) -> dict:
         )
     except jwt.PyJWTError as exc:
         raise AppError(401, "invalid_token", "登录凭证无效或已过期") from exc
-

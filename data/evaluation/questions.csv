@@ -1,0 +1,31 @@
+id,question,expected_keywords,source_file
+Q01,Xiaomi 14 的屏幕尺寸是多少,6.36,xiaomi-14.md
+Q02,Xiaomi 14 支持多少瓦有线快充,90W,xiaomi-14.md
+Q03,Xiaomi 14 的电池容量是多少,4610mAh,xiaomi-14.md
+Q04,T12 最大吸力是多少,3500Pa,robot-vacuum-t12.md
+Q05,T12 标准模式能清扫多久,130分钟,robot-vacuum-t12.md
+Q06,T12 使用什么导航方式,LDS|激光导航,robot-vacuum-t12.md
+Q07,T12 的型号是什么,B106GL,robot-vacuum-t12-specs.md
+Q08,T12 的额定功率是多少,45W,robot-vacuum-t12-specs.md
+Q09,T12 的净重是多少,4.8kg,robot-vacuum-t12-specs.md
+Q10,X20 最大吸力是多少,5000Pa,robot-vacuum-x20.md
+Q11,X20 尘盒容量是多少,430mL,robot-vacuum-x20.md
+Q12,X20 电池容量是多少,5200mAh,robot-vacuum-x20.md
+Q13,X10 最大吸力是多少,4000Pa,robot-vacuum-x10.md
+Q14,X10 最长清扫时间是多少,180分钟,robot-vacuum-x10.md
+Q15,X10 水箱容量是多少,200mL,robot-vacuum-x10.md
+Q16,X20 Pro 最大吸力是多少,7000Pa,robot-vacuum-x20-pro.md
+Q17,X20 Pro 清水箱容量是多少,4L,robot-vacuum-x20-pro.md
+Q18,X20 Pro 污水箱容量是多少,3.8L,robot-vacuum-x20-pro.md
+Q19,Robot Vacuum 5 最大吸力是多少,20000Pa,robot-vacuum-5.md
+Q20,Robot Vacuum 5 最低可进入多高的空间,9.5cm,robot-vacuum-5.md
+Q21,Robot Vacuum 5 能连续清扫多久,140分钟,robot-vacuum-5.md
+Q22,Smart Band 7 屏幕尺寸是多少,1.62英寸,smart-band-7.md
+Q23,Smart Band 7 防水等级是多少,5ATM,smart-band-7.md
+Q24,Smart Band 7 典型续航多久,14天,smart-band-7.md
+Q25,Smart Band 9 峰值亮度是多少,1200尼特,smart-band-9.md
+Q26,Smart Band 9 典型续航多久,21天,smart-band-9.md
+Q27,Smart Band 9 支持最低哪个 Android 版本,Android 8.0,smart-band-9.md
+Q28,Smart Band 10 屏幕尺寸是多少,1.72英寸,smart-band-10.md
+Q29,Smart Band 10 支持多少运动模式,150+,smart-band-10.md
+Q30,Smart Band 10 的屏占比是多少,73%,smart-band-10.md

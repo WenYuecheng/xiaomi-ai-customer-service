@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth.router import router as auth_router
 from app.chat.router import router as chat_router
@@ -12,6 +13,7 @@ from app.db.base import Base, create_database
 from app.ingestion.router import router as ingestion_router
 from app.ingestion.worker import JobWorker
 from app.knowledge.router import router as knowledge_router
+from app.operations.router import router as operations_router
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -41,6 +43,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.session_factory = session_factory
     application.state.cancelled_runs = set()
     application.add_middleware(RequestIdMiddleware)
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PATCH", "DELETE"],
+        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+    )
     application.add_exception_handler(AppError, app_error_handler)
     application.add_exception_handler(RequestValidationError, validation_error_handler)
 
@@ -54,6 +63,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     root_router.include_router(knowledge_router)
     root_router.include_router(ingestion_router)
     root_router.include_router(chat_router)
+    root_router.include_router(operations_router)
     application.include_router(root_router)
     return application
 
