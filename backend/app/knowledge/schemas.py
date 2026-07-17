@@ -1,0 +1,27 @@
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class KnowledgeBaseCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    description: str | None = Field(default=None, max_length=2000)
+    embedding_model: str = Field(default="mock-hash-embedding", max_length=100)
+
+
+class KnowledgeBaseResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    description: str | None
+    status: str
+    embedding_model: str
+    owner_id: str
+    created_at: datetime
+
+
+class KnowledgeBaseList(BaseModel):
+    items: list[KnowledgeBaseResponse]
+    total: int
+
