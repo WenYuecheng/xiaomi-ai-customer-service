@@ -9,6 +9,7 @@
 - AI 流程：正常知识问题固定执行 `DeepSeek 问题理解 → BGE 候选召回 → DeepSeek AI 重排 → DeepSeek 可信回答 → 引用校验`；重排异常、空选择、业务意图、敏感输入和 SSE 终态均有自动测试。
 - 真实模型：Docker 中使用 `deepseek-chat` 和 `BAAI/bge-small-zh-v1.5` 验证“X20 Pro 最大吸力是多少？”。BGE 召回 1 个片段，AI 重排保留 1 个并说明“直接给出最大吸力 7000Pa”，最终回答“X20 Pro 最大吸力为 7000Pa”，来源为 `robot-vacuum-x20-pro.md`。
 - SSE：真实请求按阶段发送 `understanding → retrieval → reranking → generation → grounding`，并在 `delta` 后返回实际来源；低置信度场景的每个终态事件只发送一次。
+- Docker 持久化：本阶段连续完成 3 次 `docker compose down` / `up -d`，每次后端均恢复为 healthy、前端可访问。重启前后均为 3 个用户、2 个知识库、74 个文档、268 个 chunk、12 个会话、38 条消息、74 个上传文件、9 个 Chroma 文件和 25 个模型文件。
 
 ## 第一阶段与基础平台验收记录
 
