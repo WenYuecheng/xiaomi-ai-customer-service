@@ -63,6 +63,32 @@ def test_grounded_chat_returns_actual_source_and_history(
     assert history["messages"][1]["ai_trace"] == body["ai_trace"]
 
 
+def test_product_comparison_returns_saved_structured_advisor_plan(
+    client: TestClient, users: dict[str, str]
+) -> None:
+    operator_headers = auth_headers(client, "operator", users["operator"])
+    knowledge_base_id = prepare_knowledge(client, operator_headers)
+    user_headers = auth_headers(client, "customer", users["customer"])
+
+    response = client.post(
+        "/api/v1/chat/completions",
+        headers=user_headers,
+        json={
+            "knowledge_base_id": knowledge_base_id,
+            "message": "对比一下小米 14，帮我判断是否适合重视续航的人",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["advisor_plan"]["candidates"]
+    assert body["advisor_session_id"]
+    history = client.get(
+        f"/api/v1/conversations/{body['conversation_id']}", headers=user_headers
+    ).json()
+    assert history["messages"][-1]["advisor_plan"] == body["advisor_plan"]
+
+
 def test_source_includes_original_public_url(client: TestClient, users: dict[str, str]) -> None:
     operator_headers = auth_headers(client, "operator", users["operator"])
     knowledge_base_id = create_knowledge_base(client, operator_headers)

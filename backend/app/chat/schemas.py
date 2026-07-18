@@ -57,6 +57,8 @@ class ChatResponse(BaseModel):
     fallback: bool
     transfer_suggested: bool
     ai_trace: list[AiTraceStep] = Field(default_factory=list)
+    advisor_session_id: str | None = None
+    advisor_plan: dict | None = None
 
 
 class MessageResponse(BaseModel):
@@ -69,6 +71,8 @@ class MessageResponse(BaseModel):
     created_at: datetime
     sources: list[SourceResponse] = Field(default_factory=list)
     ai_trace: list[AiTraceStep] = Field(default_factory=list)
+    advisor_session_id: str | None = None
+    advisor_plan: dict | None = None
 
 
 class ConversationResponse(BaseModel):

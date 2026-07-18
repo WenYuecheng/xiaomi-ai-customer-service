@@ -319,3 +319,44 @@ class RecommendationTrainingRun(Base):
     failure_examples: Mapped[list[dict]] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AdvisorSession(Base):
+    __tablename__ = "advisor_sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    knowledge_base_id: Mapped[str] = mapped_column(ForeignKey("knowledge_bases.id"), index=True)
+    title: Mapped[str] = mapped_column(String(100))
+    category: Mapped[str | None] = mapped_column(String(30), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    turns: Mapped[list["AdvisorTurn"]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="AdvisorTurn.sequence_no",
+    )
+
+
+class AdvisorTurn(Base):
+    __tablename__ = "advisor_turns"
+    __table_args__ = (
+        UniqueConstraint("session_id", "sequence_no", name="uq_advisor_turn_sequence"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    session_id: Mapped[str] = mapped_column(ForeignKey("advisor_sessions.id"), index=True)
+    message_id: Mapped[str | None] = mapped_column(ForeignKey("messages.id"), index=True)
+    sequence_no: Mapped[int] = mapped_column(Integer)
+    question: Mapped[str] = mapped_column(Text)
+    requirements: Mapped[dict] = mapped_column(JSON, default=dict)
+    plan: Mapped[dict] = mapped_column(JSON, default=dict)
+    sources: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    ai_trace: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    status: Mapped[str] = mapped_column(String(20), default="completed", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    session: Mapped[AdvisorSession] = relationship(back_populates="turns")

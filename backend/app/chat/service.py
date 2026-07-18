@@ -9,13 +9,14 @@
 """
 
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from time import perf_counter
 from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.advisor.service import create_chat_advisor_plan, sync_chat_advisor_trace
 from app.chat.schemas import AiTraceStep
 from app.core.config import Settings
 from app.core.errors import AppError
@@ -32,9 +33,9 @@ from app.db.models import (
 from app.rag.providers import (
     ChatProvider,
     QuestionAnalysis,
-    RerankCandidate,
     create_chat_provider,
 )
+from app.rag.reranking import rerank_sources
 from app.rag.retrieval import retrieve_sources
 from app.rag.vector_store import VectorStoreService
 
@@ -72,6 +73,10 @@ class PreparedChat:
     provider: ChatProvider
     behavior_event: BehaviorEvent
     ai_trace: list[AiTraceStep]
+    analysis: QuestionAnalysis
+    advisor_session_id: str | None
+    advisor_turn_id: str | None
+    advisor_plan: dict | None
 
 
 def classify_intent(text: str) -> str:
@@ -150,60 +155,6 @@ def persist_trace(session: Session, prepared: PreparedChat) -> None:
         "ai_trace": [step.model_dump() for step in prepared.ai_trace],
     }
     session.commit()
-
-
-def rerank_sources(
-    provider: ChatProvider,
-    question: str,
-    candidates,
-    top_k: int,
-    min_score: float,
-) -> tuple[list, str, str, list[str]]:
-    try:
-        result = provider.rerank(
-            question,
-            [
-                RerankCandidate(
-                    chunk_id=item.chunk_id,
-                    filename=item.filename,
-                    location=item.location,
-                    snippet=item.snippet,
-                    retrieval_score=item.score,
-                )
-                for item in candidates
-            ],
-            top_k,
-        )
-    except Exception:
-        selected = candidates[:top_k]
-        return (
-            selected,
-            "degraded",
-            f"AI 重排不可用，已降级使用原始排序并保留 {len(selected)} 个片段",
-            ["重排结果解析失败或包含非法候选 ID"],
-        )
-    candidate_by_id = {item.chunk_id: item for item in candidates}
-    selected = [
-        replace(candidate_by_id[decision.chunk_id], score=round(decision.relevance_score, 4))
-        for decision in result.decisions
-        if decision.relevance_score >= min_score
-    ][:top_k]
-    details = [
-        (
-            f"保留 {candidate_by_id[item.chunk_id].filename}：{item.reason}"
-            if item.relevance_score >= min_score
-            else f"排除 {candidate_by_id[item.chunk_id].filename}：{item.reason}"
-        )
-        for item in result.decisions[:3]
-    ]
-    return (
-        selected,
-        "completed",
-        f"从 {len(candidates)} 个候选中保留 {len(selected)} 个可靠片段"
-        if selected
-        else f"检查 {len(candidates)} 个候选后未保留可靠片段",
-        details,
-    )
 
 
 def get_or_create_conversation(
@@ -322,6 +273,14 @@ def initialize_stream_chat(
         provider=create_chat_provider(settings),
         behavior_event=behavior_event,
         ai_trace=[],
+        analysis=QuestionAnalysis(
+            intent="knowledge_query",
+            rewritten_question=question,
+            need_retrieval=True,
+        ),
+        advisor_session_id=None,
+        advisor_turn_id=None,
+        advisor_plan=None,
     )
 
 
@@ -397,6 +356,7 @@ def stream_preparation_steps(
             summary=f"AI 理解不可用，已降级为规则；检索问题：{rewritten}",
         )
     prepared.question = analysis.rewritten_question
+    prepared.analysis = analysis
     prepared.message.intent = analysis.intent
     upsert_trace(prepared, understanding)
     persist_trace(session, prepared)
@@ -786,6 +746,10 @@ def prepare_chat(
         provider=provider,
         behavior_event=behavior_event,
         ai_trace=trace,
+        analysis=analysis,
+        advisor_session_id=None,
+        advisor_turn_id=None,
+        advisor_plan=None,
     )
 
 
@@ -811,6 +775,74 @@ def stream_prepared_chat(
             if is_cancelled():
                 return
             yield prepared.message.content[index : index + 12]
+        return
+    if prepared.analysis.intent in {"product_comparison", "purchase_advice"}:
+        generation_started = perf_counter()
+        try:
+            advisor_session_id, advisor_turn_id, plan = create_chat_advisor_plan(
+                session,
+                prepared.user,
+                prepared.knowledge_base_id,
+                prepared.original_question,
+                prepared.analysis,
+                prepared.provider,
+                prepared.sources,
+                prepared.message.id,
+                prepared.ai_trace,
+            )
+            prepared.advisor_session_id = advisor_session_id
+            prepared.advisor_turn_id = advisor_turn_id
+            prepared.advisor_plan = plan
+            answer = f"AI 选购方案已生成：{plan['recommendation']['summary']}"
+            for index in range(0, len(answer), 12):
+                if is_cancelled():
+                    break
+                yield answer[index : index + 12]
+            finalize_answer(session, prepared, answer)
+            upsert_trace(
+                prepared,
+                AiTraceStep(
+                    stage="generation",
+                    status="completed",
+                    engine=prepared.ai_trace[0].engine,
+                    model=prepared.ai_trace[0].model,
+                    duration_ms=int((perf_counter() - generation_started) * 1000),
+                    summary="DeepSeek 调用 3/3：结构化选购方案生成完成",
+                ),
+            )
+            upsert_trace(
+                prepared,
+                AiTraceStep(
+                    stage="grounding",
+                    status="completed",
+                    engine="引用校验",
+                    model="source-grounding-v1",
+                    duration_ms=0,
+                    summary=f"已确认方案只采用 {len(prepared.sources)} 个实际检索来源",
+                ),
+            )
+            prepared.behavior_event.payload = {
+                **prepared.behavior_event.payload,
+                "advisor_session_id": advisor_session_id,
+                "advisor_turn_id": advisor_turn_id,
+                "advisor_plan": plan,
+            }
+            sync_chat_advisor_trace(session, advisor_turn_id, prepared.ai_trace)
+            persist_trace(session, prepared)
+        except Exception:
+            upsert_trace(
+                prepared,
+                AiTraceStep(
+                    stage="generation",
+                    status="failed",
+                    engine=prepared.ai_trace[0].engine,
+                    model=prepared.ai_trace[0].model,
+                    duration_ms=int((perf_counter() - generation_started) * 1000),
+                    summary="结构化选购方案生成失败",
+                ),
+            )
+            persist_trace(session, prepared)
+            raise
         return
     del settings
     parts: list[str] = []
@@ -877,7 +909,15 @@ def complete_chat(
     knowledge_base_id: str,
     question: str,
     conversation_id: str | None,
-) -> tuple[Conversation, Message, list[MessageSource], str, list[AiTraceStep]]:
+) -> tuple[
+    Conversation,
+    Message,
+    list[MessageSource],
+    str,
+    list[AiTraceStep],
+    str | None,
+    dict | None,
+]:
     prepared = prepare_chat(
         session,
         settings,
@@ -890,12 +930,29 @@ def complete_chat(
     if prepared.requires_generation:
         generation_started = perf_counter()
         try:
-            answer = prepared.provider.generate(
-                prepared.question,
-                prepared.contexts,
-                prepared.conversation.summary,
-                prepared.recent_messages,
-            )
+            if prepared.analysis.intent in {"product_comparison", "purchase_advice"}:
+                advisor_session_id, advisor_turn_id, plan = create_chat_advisor_plan(
+                    session,
+                    prepared.user,
+                    prepared.knowledge_base_id,
+                    prepared.original_question,
+                    prepared.analysis,
+                    prepared.provider,
+                    prepared.sources,
+                    prepared.message.id,
+                    prepared.ai_trace,
+                )
+                prepared.advisor_session_id = advisor_session_id
+                prepared.advisor_turn_id = advisor_turn_id
+                prepared.advisor_plan = plan
+                answer = f"AI 选购方案已生成：{plan['recommendation']['summary']}"
+            else:
+                answer = prepared.provider.generate(
+                    prepared.question,
+                    prepared.contexts,
+                    prepared.conversation.summary,
+                    prepared.recent_messages,
+                )
         except Exception:
             upsert_trace(
                 prepared,
@@ -919,7 +976,11 @@ def complete_chat(
                 engine=prepared.ai_trace[0].engine,
                 model=prepared.ai_trace[0].model,
                 duration_ms=int((perf_counter() - generation_started) * 1000),
-                summary="DeepSeek 调用 3/3：可信回答生成完成",
+                summary=(
+                    "DeepSeek 调用 3/3：结构化选购方案生成完成"
+                    if prepared.advisor_plan
+                    else "DeepSeek 调用 3/3：可信回答生成完成"
+                ),
             ),
         )
         upsert_trace(
@@ -933,6 +994,14 @@ def complete_chat(
                 summary=f"已确认回答仅采用 {len(prepared.sources)} 个实际检索来源",
             ),
         )
+        if prepared.advisor_plan:
+            prepared.behavior_event.payload = {
+                **prepared.behavior_event.payload,
+                "advisor_session_id": prepared.advisor_session_id,
+                "advisor_turn_id": prepared.advisor_turn_id,
+                "advisor_plan": prepared.advisor_plan,
+            }
+            sync_chat_advisor_trace(session, prepared.advisor_turn_id, prepared.ai_trace)
         persist_trace(session, prepared)
     return (
         prepared.conversation,
@@ -940,4 +1009,6 @@ def complete_chat(
         prepared.sources,
         prepared.run_id,
         prepared.ai_trace,
+        prepared.advisor_session_id,
+        prepared.advisor_plan,
     )

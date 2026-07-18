@@ -49,7 +49,15 @@ from app.db.models import (
 router = APIRouter(tags=["chat"])
 
 
-def build_chat_response(conversation, message, sources, run_id: str, ai_trace) -> ChatResponse:
+def build_chat_response(
+    conversation,
+    message,
+    sources,
+    run_id: str,
+    ai_trace,
+    advisor_session_id: str | None,
+    advisor_plan: dict | None,
+) -> ChatResponse:
     return ChatResponse(
         conversation_id=conversation.id,
         message_id=message.id,
@@ -61,6 +69,8 @@ def build_chat_response(conversation, message, sources, run_id: str, ai_trace) -
             conversation.consecutive_fallbacks >= 2 or message.intent == "human_transfer"
         ),
         ai_trace=ai_trace,
+        advisor_session_id=advisor_session_id,
+        advisor_plan=advisor_plan,
     )
 
 
@@ -88,7 +98,15 @@ def chat_completion(
             payload.conversation_id,
         )
     else:
-        conversation, message, sources, run_id, ai_trace = complete_chat(
+        (
+            conversation,
+            message,
+            sources,
+            run_id,
+            ai_trace,
+            advisor_session_id,
+            advisor_plan,
+        ) = complete_chat(
             session,
             request.app.state.settings,
             request.app.state.worker.vector_store,
@@ -98,7 +116,15 @@ def chat_completion(
             payload.conversation_id,
         )
     if not payload.stream:
-        return build_chat_response(conversation, message, sources, run_id, ai_trace)
+        return build_chat_response(
+            conversation,
+            message,
+            sources,
+            run_id,
+            ai_trace,
+            advisor_session_id,
+            advisor_plan,
+        )
 
     def encode_event(event: str, data: dict) -> bytes:
         payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
@@ -142,6 +168,14 @@ def chat_completion(
                 ]
             },
         )
+        if prepared.advisor_plan:
+            yield encode_event(
+                "advisor",
+                {
+                    "advisor_session_id": prepared.advisor_session_id,
+                    "plan": prepared.advisor_plan,
+                },
+            )
         generation = next(step for step in prepared.ai_trace if step.stage == "generation")
         grounding = next(step for step in prepared.ai_trace if step.stage == "grounding")
         if prepared.requires_generation:
@@ -184,8 +218,8 @@ def conversation_history(
             BehaviorEvent.event_type == "chat",
         )
     ).all()
-    traces_by_message_id = {
-        event.payload.get("message_id"): event.payload.get("ai_trace", [])
+    payloads_by_message_id = {
+        event.payload.get("message_id"): event.payload
         for event in trace_events
         if event.payload.get("message_id")
     }
@@ -197,7 +231,9 @@ def conversation_history(
             fallback=message.fallback,
             created_at=message.created_at,
             sources=[SourceResponse.model_validate(source) for source in message.sources],
-            ai_trace=traces_by_message_id.get(message.id, []),
+            ai_trace=payloads_by_message_id.get(message.id, {}).get("ai_trace", []),
+            advisor_session_id=payloads_by_message_id.get(message.id, {}).get("advisor_session_id"),
+            advisor_plan=payloads_by_message_id.get(message.id, {}).get("advisor_plan"),
         )
         for message in conversation.messages
     ]

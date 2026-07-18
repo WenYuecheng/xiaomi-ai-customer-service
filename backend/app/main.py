@@ -4,6 +4,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.advisor.router import router as advisor_router
 from app.auth.router import router as auth_router
 from app.chat.router import router as chat_router
 from app.core.config import Settings, get_settings
@@ -64,6 +65,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     root_router.include_router(knowledge_router)
     root_router.include_router(ingestion_router)
     root_router.include_router(chat_router)
+    root_router.include_router(advisor_router)
     root_router.include_router(operations_router)
     application.include_router(root_router)
     return application
