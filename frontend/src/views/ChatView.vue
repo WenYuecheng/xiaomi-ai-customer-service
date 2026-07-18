@@ -8,7 +8,7 @@ import ChatComposer from '@/components/chat/ChatComposer.vue'
 import ChatMessage from '@/components/chat/ChatMessage.vue'
 import FeedbackDrawer from '@/components/chat/FeedbackDrawer.vue'
 import ProfileDrawer from '@/components/chat/ProfileDrawer.vue'
-import type { AiTraceStep, ChatMessage as Message, KnowledgeBase, Source } from '@/types'
+import type { AdvisorPlan, AiTraceStep, ChatMessage as Message, KnowledgeBase, Source } from '@/types'
 
 const STORAGE_KEY = 'xmcs_last_conversation'
 const knowledgeBases = shallowRef<KnowledgeBase[]>([])
@@ -94,6 +94,10 @@ async function send(message: string): Promise<void> {
         : current.map((item, itemIndex) => itemIndex === index ? step : item)
     },
     onSources: (sources: Source[]) => { assistant.sources = sources },
+    onAdvisor: (data: { advisor_session_id: string; plan: AdvisorPlan }) => {
+      assistant.advisor_session_id = data.advisor_session_id
+      assistant.advisor_plan = data.plan
+    },
     onDone: (data: { fallback: boolean; transfer_suggested: boolean }) => {
       assistant.fallback = data.fallback; assistant.transfer_suggested = data.transfer_suggested
     },

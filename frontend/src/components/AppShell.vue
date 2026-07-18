@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
-import { ChatDotRound, DataAnalysis, Postcard } from '@element-plus/icons-vue'
+import { ChatDotRound, DataAnalysis, Postcard, ShoppingCart } from '@element-plus/icons-vue'
 
 import { useAuthStore } from '@/stores/auth'
 
@@ -19,6 +19,7 @@ function logout(): void {
       <RouterLink class="brand" to="/chat"><span>MI</span> 小爱客服工作台</RouterLink>
       <nav class="nav" aria-label="主导航">
         <RouterLink to="/chat">可信问答</RouterLink>
+        <RouterLink to="/advisor">AI 智能选购</RouterLink>
         <RouterLink v-if="auth.canOperate" to="/knowledge">知识库</RouterLink>
         <RouterLink v-if="auth.canOperate" to="/operations">运营洞察</RouterLink>
       </nav>
@@ -27,6 +28,7 @@ function logout(): void {
     <main class="shell__content"><slot /></main>
     <nav class="mobile-nav" aria-label="移动端主导航">
       <RouterLink to="/chat"><el-icon><ChatDotRound /></el-icon><span>问答</span></RouterLink>
+      <RouterLink to="/advisor"><el-icon><ShoppingCart /></el-icon><span>选购</span></RouterLink>
       <RouterLink v-if="auth.canOperate" to="/knowledge"><el-icon><Postcard /></el-icon><span>知识库</span></RouterLink>
       <RouterLink v-if="auth.canOperate" to="/operations"><el-icon><DataAnalysis /></el-icon><span>洞察</span></RouterLink>
     </nav>

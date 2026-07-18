@@ -3,7 +3,7 @@ import { computed } from 'vue'
 
 import type { AiTraceStep } from '@/types'
 
-const props = defineProps<{ steps: AiTraceStep[] }>()
+const props = defineProps<{ steps: readonly AiTraceStep[] }>()
 
 const orderedSteps = computed(() => {
   const order: AiTraceStep['stage'][] = ['understanding', 'retrieval', 'reranking', 'generation', 'grounding']

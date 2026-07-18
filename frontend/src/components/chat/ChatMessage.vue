@@ -5,6 +5,7 @@ import { computed } from 'vue'
 import { CircleCheckFilled, WarningFilled } from '@element-plus/icons-vue'
 
 import type { ChatMessage as Message } from '@/types'
+import AdvisorPlanCard from '@/components/advisor/AdvisorPlanCard.vue'
 
 import AiTracePanel from './AiTracePanel.vue'
 import SourceRail from './SourceRail.vue'
@@ -30,7 +31,8 @@ const rendered = computed(() => DOMPurify.sanitize(markdown.render(props.message
       <div v-if="message.fallback" class="message__fallback">知识库暂无可靠答案</div>
       <AiTracePanel v-if="message.role === 'assistant' && message.ai_trace?.length" :steps="message.ai_trace" />
       <div class="message__content" :class="{ 'is-typing': isTyping }" v-html="rendered" />
-      <SourceRail v-if="message.sources.length" :sources="message.sources" />
+      <AdvisorPlanCard v-if="message.advisor_plan" :plan="message.advisor_plan" :sources="message.sources" />
+      <SourceRail v-if="message.sources.length && !message.advisor_plan" :sources="message.sources" />
       <div v-if="message.role === 'assistant'" class="message__actions">
         <button
           type="button"

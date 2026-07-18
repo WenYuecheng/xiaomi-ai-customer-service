@@ -2,34 +2,23 @@ import type { AdvisorPlan, AiTraceStep, Source } from '@/types'
 
 import { TOKEN_KEY } from './client'
 
-export interface StreamHandlers {
-  onMeta: (data: { conversation_id: string; message_id: string; run_id: string }) => void
-  onDelta: (content: string) => void
+export interface AdvisorStreamHandlers {
+  onMeta: (data: { session_id: string; turn_id: string }) => void
   onTrace: (step: AiTraceStep) => void
+  onAdvisor: (plan: AdvisorPlan, turnId: string) => void
   onSources: (sources: Source[]) => void
-  onAdvisor?: (data: { advisor_session_id: string; plan: AdvisorPlan }) => void
-  onDone: (data: { fallback: boolean; transfer_suggested: boolean }) => void
-  onError?: (data: { code: string; message: string }) => void
+  onDone: (data: { status: string }) => void
+  onError?: (data: { code?: string; message: string }) => void
 }
 
-export class ChatStreamError extends Error {
-  constructor(
-    public readonly status: number,
-    public readonly code: string,
-    message: string,
-  ) {
-    super(message)
-    this.name = 'ChatStreamError'
-  }
-}
-
-export async function streamChat(
-  payload: { knowledge_base_id: string; conversation_id?: string; message: string },
-  handlers: StreamHandlers,
+export async function streamAdvisor(
+  url: string,
+  payload: object,
+  handlers: AdvisorStreamHandlers,
   signal: AbortSignal,
 ): Promise<void> {
   const token = localStorage.getItem(TOKEN_KEY)
-  const response = await fetch('/api/v1/chat/completions', {
+  const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token ?? ''}` },
     body: JSON.stringify({ ...payload, stream: true }),
@@ -37,11 +26,7 @@ export async function streamChat(
   })
   if (!response.ok || !response.body) {
     const body = await response.json().catch(() => null)
-    throw new ChatStreamError(
-      response.status,
-      body?.error?.code ?? 'stream_connection_failed',
-      body?.error?.message ?? '流式回答连接失败',
-    )
+    throw new Error(body?.error?.message ?? 'AI 选购服务连接失败')
   }
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
@@ -57,14 +42,13 @@ export async function streamChat(
       if (!event || !raw) continue
       const data = JSON.parse(raw)
       if (event === 'meta') handlers.onMeta(data)
-      if (event === 'delta') handlers.onDelta(data.content)
       if (event === 'trace') handlers.onTrace(data)
+      if (event === 'advisor' && data.plan) handlers.onAdvisor(data.plan, data.turn_id)
       if (event === 'sources') handlers.onSources(data.sources)
-      if (event === 'advisor') handlers.onAdvisor?.(data)
       if (event === 'done') handlers.onDone(data)
       if (event === 'error') {
         handlers.onError?.(data)
-        throw new ChatStreamError(500, data.code ?? 'generation_failed', data.message ?? '回答生成失败')
+        throw new Error(data.message ?? 'AI 选购方案生成失败')
       }
     }
     if (done) break

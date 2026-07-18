@@ -14,6 +14,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/advisor',
+      name: 'advisor',
+      component: () => import('@/views/AdvisorView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/knowledge',
       name: 'knowledge',
       component: () => import('@/views/KnowledgeView.vue'),
@@ -39,4 +45,3 @@ router.beforeEach(async (to) => {
 })
 
 export default router
-

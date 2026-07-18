@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Source } from '@/types'
 
-defineProps<{ sources: Source[] }>()
+defineProps<{ sources: readonly Source[] }>()
 
 function safeSourceUrl(value?: string | null): string | undefined {
   if (!value) return undefined
