@@ -7,9 +7,7 @@ import httpx
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Run the 30-question RAG regression set"
-    )
+    parser = argparse.ArgumentParser(description="Run a grounded RAG regression set")
     parser.add_argument("--questions", type=Path, required=True)
     parser.add_argument("--knowledge-base-id", required=True)
     parser.add_argument("--base-url", default="http://localhost:8000/api/v1")

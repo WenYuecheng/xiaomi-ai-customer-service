@@ -2,6 +2,7 @@ from io import BytesIO
 
 from fastapi.testclient import TestClient
 
+from app.rag.providers import QuestionAnalysis
 from tests.conftest import auth_headers
 from tests.test_documents import create_knowledge_base, wait_for_job
 
@@ -44,10 +45,50 @@ def test_grounded_chat_returns_actual_source_and_history(
     assert "90W" in body["answer"]
     assert body["sources"][0]["filename"] == "xiaomi14.md"
     assert "90W" in body["sources"][0]["snippet"]
+    assert [step["stage"] for step in body["ai_trace"]] == [
+        "understanding",
+        "retrieval",
+        "generation",
+        "grounding",
+    ]
+    assert body["ai_trace"][0]["status"] == "completed"
+    assert body["ai_trace"][2]["status"] == "completed"
     history = client.get(
         f"/api/v1/conversations/{body['conversation_id']}", headers=user_headers
     ).json()
     assert [item["role"] for item in history["messages"]] == ["user", "assistant"]
+    assert history["messages"][1]["ai_trace"] == body["ai_trace"]
+
+
+def test_source_includes_original_public_url(client: TestClient, users: dict[str, str]) -> None:
+    operator_headers = auth_headers(client, "operator", users["operator"])
+    knowledge_base_id = create_knowledge_base(client, operator_headers)
+    upload = client.post(
+        "/api/v1/documents/upload",
+        headers=operator_headers,
+        data={
+            "knowledge_base_id": knowledge_base_id,
+            "source_url": "https://www.mi.com/example",
+        },
+        files={
+            "file": (
+                "source.md",
+                BytesIO("小米 14 支持 90W 有线快充。".encode()),
+                "text/markdown",
+            )
+        },
+    ).json()
+    wait_for_job(client, operator_headers, upload["job_id"])
+    user_headers = auth_headers(client, "customer", users["customer"])
+
+    response = client.post(
+        "/api/v1/chat/completions",
+        headers=user_headers,
+        json={"knowledge_base_id": knowledge_base_id, "message": "小米 14 支持多少瓦快充？"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["sources"][0]["source_url"] == "https://www.mi.com/example"
 
 
 def test_unrelated_question_falls_back_without_sources(
@@ -67,6 +108,58 @@ def test_unrelated_question_falls_back_without_sources(
     assert response.json()["fallback"] is True
     assert response.json()["sources"] == []
     assert "未找到可靠依据" in response.json()["answer"]
+    generation = next(step for step in response.json()["ai_trace"] if step["stage"] == "generation")
+    assert generation["status"] == "skipped"
+    assert "没有可靠依据" in generation["summary"]
+
+
+def test_model_is_called_twice_only_when_reliable_sources_exist(
+    client: TestClient, users: dict[str, str], monkeypatch
+) -> None:
+    class CountingProvider:
+        analysis_calls = 0
+        generation_calls = 0
+
+        def analyze(self, question, summary=None, recent_messages=None):
+            del summary, recent_messages
+            self.analysis_calls += 1
+            return QuestionAnalysis(
+                intent="knowledge_query",
+                rewritten_question=question,
+                product_models=["小米 14"] if "小米" in question else [],
+                need_retrieval=True,
+                confidence=0.99,
+            )
+
+        def generate(self, question, contexts, summary=None, recent_messages=None):
+            del question, summary, recent_messages
+            self.generation_calls += 1
+            return f"根据知识库，{contexts[0]}"
+
+        def stream(self, question, contexts, summary=None, recent_messages=None):
+            yield self.generate(question, contexts, summary, recent_messages)
+
+    provider = CountingProvider()
+    monkeypatch.setattr("app.chat.service.create_chat_provider", lambda _settings: provider)
+    operator_headers = auth_headers(client, "operator", users["operator"])
+    knowledge_base_id = prepare_knowledge(client, operator_headers)
+    user_headers = auth_headers(client, "customer", users["customer"])
+
+    grounded = client.post(
+        "/api/v1/chat/completions",
+        headers=user_headers,
+        json={"knowledge_base_id": knowledge_base_id, "message": "小米 14 充电功率？"},
+    )
+    fallback = client.post(
+        "/api/v1/chat/completions",
+        headers=user_headers,
+        json={"knowledge_base_id": knowledge_base_id, "message": "火星天气？"},
+    )
+
+    assert grounded.status_code == 200
+    assert fallback.status_code == 200
+    assert provider.analysis_calls == 2
+    assert provider.generation_calls == 1
 
 
 def test_feedback_is_idempotently_updated(client: TestClient, users: dict[str, str]) -> None:
@@ -113,7 +206,11 @@ def test_streaming_chat_emits_contract_events(client: TestClient, users: dict[st
     assert "event: delta" in text
     assert "event: sources" in text
     assert "event: done" in text
-    assert text.index("event: meta") < text.index("event: delta") < text.index("event: sources")
+    assert "event: trace" in text
+    assert text.index("event: meta") < text.index("event: trace") < text.index("event: delta")
+    assert text.index("event: delta") < text.index("event: sources") < text.index("event: done")
+    assert '"stage":"understanding"' in text
+    assert '"stage":"grounding"' in text
 
 
 def test_follow_up_rewrite_keeps_product_context(client: TestClient, users: dict[str, str]) -> None:
@@ -160,11 +257,15 @@ def test_explicit_human_transfer_is_suggested_immediately(
 
 
 def test_sensitive_credentials_are_blocked_and_audited(
-    client: TestClient, users: dict[str, str]
+    client: TestClient, users: dict[str, str], monkeypatch
 ) -> None:
     operator_headers = auth_headers(client, "operator", users["operator"])
     knowledge_base_id = prepare_knowledge(client, operator_headers)
     user_headers = auth_headers(client, "customer", users["customer"])
+    monkeypatch.setattr(
+        "app.chat.service.create_chat_provider",
+        lambda _settings: (_ for _ in ()).throw(AssertionError("敏感输入不得进入模型")),
+    )
 
     response = client.post(
         "/api/v1/chat/completions",

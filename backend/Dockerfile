@@ -10,7 +10,7 @@ COPY --from=uv /uv /usr/local/bin/uv
 RUN groupadd --system app && useradd --system --gid app --home-dir /app app
 WORKDIR /app
 COPY backend/pyproject.toml backend/uv.lock ./
-RUN uv sync --frozen --no-dev --no-cache
+RUN uv sync --frozen --no-dev --no-cache --extra local-embeddings
 COPY backend/app ./app
 COPY backend/alembic ./alembic
 COPY backend/alembic.ini ./alembic.ini

@@ -3,7 +3,8 @@ from pathlib import Path
 from typing import Annotated
 from uuid import uuid4
 
-from fastapi import APIRouter, File, Form, Request, UploadFile, status
+from fastapi import APIRouter, File, Form, Query, Request, UploadFile, status
+from pydantic import AnyHttpUrl
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -23,6 +24,7 @@ from app.ingestion.schemas import (
     ChunkResponse,
     DocumentList,
     DocumentResponse,
+    JobList,
     JobResponse,
     UploadResponse,
 )
@@ -62,7 +64,7 @@ async def upload_document(
     file: Annotated[UploadFile, File()],
     chunk_size: Annotated[int | None, Form(ge=200, le=4000)] = None,
     chunk_overlap: Annotated[int | None, Form(ge=0, le=800)] = None,
-    source_url: Annotated[str | None, Form(max_length=1000)] = None,
+    source_url: Annotated[AnyHttpUrl | None, Form()] = None,
 ) -> UploadResponse:
     settings = request.app.state.settings
     knowledge_base = session.get(KnowledgeBase, knowledge_base_id)
@@ -97,7 +99,7 @@ async def upload_document(
         sha256=hashlib.sha256(content).hexdigest(),
         chunk_size=actual_chunk_size,
         chunk_overlap=actual_overlap,
-        source_url=source_url,
+        source_url=str(source_url) if source_url else None,
     )
     job = ProcessingJob(document=document)
     session.add_all([document, job])
@@ -163,6 +165,28 @@ def get_job(job_id: str, session: SessionDep, _current_user: AdminOrOperatorDep)
     if not job:
         raise AppError(404, "job_not_found", "处理任务不存在")
     return JobResponse.model_validate(job)
+
+
+@router.get("/jobs")
+def list_jobs(
+    session: SessionDep,
+    _current_user: AdminOrOperatorDep,
+    document_id: str | None = None,
+    status_filter: Annotated[str | None, Query(alias="status", max_length=20)] = None,
+) -> JobList:
+    statement = select(ProcessingJob)
+    count_statement = select(func.count()).select_from(ProcessingJob)
+    if document_id:
+        statement = statement.where(ProcessingJob.document_id == document_id)
+        count_statement = count_statement.where(ProcessingJob.document_id == document_id)
+    if status_filter:
+        statement = statement.where(ProcessingJob.status == status_filter)
+        count_statement = count_statement.where(ProcessingJob.status == status_filter)
+    jobs = list(session.scalars(statement.order_by(ProcessingJob.created_at.desc())))
+    return JobList(
+        items=[JobResponse.model_validate(job) for job in jobs],
+        total=session.scalar(count_statement) or 0,
+    )
 
 
 def queue_document_job(

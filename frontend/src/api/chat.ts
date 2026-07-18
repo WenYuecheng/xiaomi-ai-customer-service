@@ -1,12 +1,25 @@
-import type { Source } from '@/types'
+import type { AiTraceStep, Source } from '@/types'
 
 import { TOKEN_KEY } from './client'
 
 export interface StreamHandlers {
   onMeta: (data: { conversation_id: string; message_id: string; run_id: string }) => void
   onDelta: (content: string) => void
+  onTrace: (step: AiTraceStep) => void
   onSources: (sources: Source[]) => void
   onDone: (data: { fallback: boolean; transfer_suggested: boolean }) => void
+  onError?: (data: { code: string; message: string }) => void
+}
+
+export class ChatStreamError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly code: string,
+    message: string,
+  ) {
+    super(message)
+    this.name = 'ChatStreamError'
+  }
 }
 
 export async function streamChat(
@@ -23,7 +36,11 @@ export async function streamChat(
   })
   if (!response.ok || !response.body) {
     const body = await response.json().catch(() => null)
-    throw new Error(body?.error?.message ?? '流式回答连接失败')
+    throw new ChatStreamError(
+      response.status,
+      body?.error?.code ?? 'stream_connection_failed',
+      body?.error?.message ?? '流式回答连接失败',
+    )
   }
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
@@ -40,10 +57,14 @@ export async function streamChat(
       const data = JSON.parse(raw)
       if (event === 'meta') handlers.onMeta(data)
       if (event === 'delta') handlers.onDelta(data.content)
+      if (event === 'trace') handlers.onTrace(data)
       if (event === 'sources') handlers.onSources(data.sources)
       if (event === 'done') handlers.onDone(data)
+      if (event === 'error') {
+        handlers.onError?.(data)
+        throw new ChatStreamError(500, data.code ?? 'generation_failed', data.message ?? '回答生成失败')
+      }
     }
     if (done) break
   }
 }
-

@@ -201,6 +201,11 @@ class MessageSource(Base):
     score: Mapped[float] = mapped_column(Float)
 
     message: Mapped[Message] = relationship(back_populates="sources")
+    document: Mapped[Document] = relationship()
+
+    @property
+    def source_url(self) -> str | None:
+        return self.document.source_url
 
 
 class FeedbackRating(StrEnum):

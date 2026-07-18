@@ -18,6 +18,7 @@ from app.operations.router import router as operations_router
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
+    settings.validate_runtime_secrets()
     engine, session_factory = create_database(settings.database_url)
 
     @asynccontextmanager

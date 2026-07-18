@@ -9,7 +9,17 @@ const isLogin = computed(() => route.name === 'login')
 </script>
 
 <template>
-  <RouterView v-if="isLogin" />
-  <AppShell v-else><RouterView /></AppShell>
+  <RouterView v-if="isLogin" v-slot="{ Component }">
+    <transition name="fade-transform" mode="out-in">
+      <component :is="Component" />
+    </transition>
+  </RouterView>
+  <AppShell v-else>
+    <RouterView v-slot="{ Component }">
+      <transition name="fade-transform" mode="out-in">
+        <component :is="Component" />
+      </transition>
+    </RouterView>
+  </AppShell>
 </template>
 

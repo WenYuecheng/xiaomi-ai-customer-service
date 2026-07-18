@@ -2,19 +2,25 @@
 
 执行日期：2026-07-17。
 
-- 后端：23 项 pytest 全部通过，覆盖率 87%。
-- 前端：2 项 Vitest 全部通过，`vue-tsc` 与 Vite 生产构建通过。
+- 后端：30 项 pytest 全部通过，覆盖率 88%；Ruff 格式与静态检查通过。
+- 前端：4 项 Vitest 全部通过，`vue-tsc` 与 Vite 生产构建通过。
 - RAG：10/10 公开样本文档入库成功；30/30 标准问题通过，正确率 100%。
+- DeepSeek：独立临时环境完成 1 个真实流式 RAG 问题；SSE 顺序为 `meta → delta → sources → done`，回答“Xiaomi 14 的电池容量为 4610mAh”，真实来源数为 1。
 - 数据库：全新 SQLite 执行 Alembic `upgrade head` 成功，`alembic check` 无模型漂移。
-- Compose：`docker compose config --quiet` 通过；Docker 守护进程未启动，未完成镜像构建和三次重启持久化实测。
+- Compose：Docker Desktop 经缓存清理和非破坏性重启后恢复，无需恢复出厂设置。前后端镜像构建成功，后端约 253MB、前端约 26.1MB，两个容器均为 healthy/running。
+- 本地 Embedding：将 `sentence-transformers + PyTorch` 替换为 `FastEmbed + ONNX Runtime`，继续使用 `BAAI/bge-small-zh-v1.5`。锁文件已移除 PyTorch 和 CUDA 运行库；91MB 模型缓存持久化到 `/data/models/fastembed`。
+- Docker 持久化：连续完成 3 次 `docker compose down` / `up -d`。每次均保持 3 个用户、1 个知识库、10 个文档、10 个 chunk、2 条消息、10 个上传文件、5 个 Chroma 文件和 14 个模型文件。
+- Docker 数据保护：清理前备份 `robot_app-data` 到 `/private/tmp/robot_app-data-backup-20260717.tar.gz`，SHA-256 为 `f8bebf44a8c8e8032fe6ab702a28bfdeb1961af0a24076cdb850ad781fef519f`。
 
 自动化覆盖认证与 RBAC、知识库 CRUD、安全上传、四格式解析、重复文件、失败任务、重建/删除、可信引用、低置信度兜底、多轮追问、SSE、反馈幂等、Mock 订单、工单、热词、画像隔离、推荐和离线训练。
+
+工单回归：同一会话重复创建返回同一工单 ID；前端显示“创建中…”与持久的“工单已创建”禁用状态，失败时恢复按钮并展示错误。Docker 真实数据中由重复点击产生的 22 条冗余记录已在备份后清理，保留最早一条。
 
 RAG 数据集位于 `data/evaluation/questions.csv`，至少 30 问，及格线为 80%。样本文档均记录公开来源和采集日期。最终验收须保存以下命令输出：
 
 ```bash
-uv run --project backend ruff check backend/app backend/tests scripts
-uv run --project backend pytest backend/tests --cov=app
+uv run --project backend --extra dev ruff check backend/app backend/tests scripts
+LLM_PROVIDER=mock EMBEDDING_PROVIDER=mock uv run --project backend --extra dev pytest backend/tests --cov=app
 cd frontend && pnpm test && pnpm build
 docker compose config
 ```

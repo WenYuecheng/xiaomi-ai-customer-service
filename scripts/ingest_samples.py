@@ -6,6 +6,13 @@ from pathlib import Path
 import httpx
 
 
+def source_url(path: Path) -> str | None:
+    for line in path.read_text(encoding="utf-8").splitlines()[:12]:
+        if line.startswith("source_url:"):
+            return line.partition(":")[2].strip() or None
+    return None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Upload the official public demo samples"
@@ -15,6 +22,10 @@ def main() -> None:
     parser.add_argument("--username", default=os.getenv("INGEST_USERNAME", "operator"))
     parser.add_argument("--password", default=os.getenv("INGEST_PASSWORD"))
     parser.add_argument("--knowledge-base-id")
+    parser.add_argument("--knowledge-base-name")
+    parser.add_argument(
+        "--description", default="小米官方公开资料；每份文档保留来源和采集日期。"
+    )
     args = parser.parse_args()
     if not args.password:
         raise SystemExit(
@@ -33,8 +44,9 @@ def main() -> None:
                 "/knowledge-bases",
                 headers=headers,
                 json={
-                    "name": f"小米官方公开资料-{int(time.time())}",
-                    "description": "课程演示样本；来源和采集日期见每个文档。",
+                    "name": args.knowledge_base_name
+                    or f"小米官方公开资料-{int(time.time())}",
+                    "description": args.description,
                 },
             )
             response.raise_for_status()
@@ -45,10 +57,13 @@ def main() -> None:
             if path.name == "SOURCES.md":
                 continue
             with path.open("rb") as file:
+                data = {"knowledge_base_id": knowledge_base_id}
+                if url := source_url(path):
+                    data["source_url"] = url
                 response = client.post(
                     "/documents/upload",
                     headers=headers,
-                    data={"knowledge_base_id": knowledge_base_id},
+                    data=data,
                     files={"file": (path.name, file, "text/markdown")},
                 )
             response.raise_for_status()

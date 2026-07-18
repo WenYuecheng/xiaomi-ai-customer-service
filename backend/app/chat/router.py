@@ -1,5 +1,5 @@
 import json
-from collections.abc import AsyncIterable
+from collections.abc import Iterable
 
 from fastapi import APIRouter, Request, Response
 from sqlalchemy import select
@@ -15,15 +15,22 @@ from app.chat.schemas import (
     MessageResponse,
     SourceResponse,
 )
-from app.chat.service import complete_chat
+from app.chat.service import complete_chat, prepare_chat, stream_prepared_chat
 from app.core.errors import AppError
 from app.db.base import SessionDep
-from app.db.models import Conversation, Feedback, FeedbackRating, Message, MessageRole
+from app.db.models import (
+    BehaviorEvent,
+    Conversation,
+    Feedback,
+    FeedbackRating,
+    Message,
+    MessageRole,
+)
 
 router = APIRouter(tags=["chat"])
 
 
-def build_chat_response(conversation, message, sources, run_id: str) -> ChatResponse:
+def build_chat_response(conversation, message, sources, run_id: str, ai_trace) -> ChatResponse:
     return ChatResponse(
         conversation_id=conversation.id,
         message_id=message.id,
@@ -34,6 +41,7 @@ def build_chat_response(conversation, message, sources, run_id: str) -> ChatResp
         transfer_suggested=(
             conversation.consecutive_fallbacks >= 2 or message.intent == "human_transfer"
         ),
+        ai_trace=ai_trace,
     )
 
 
@@ -44,16 +52,34 @@ def chat_completion(
     session: SessionDep,
     current_user: CurrentUserDep,
 ) -> ChatResponse | StreamingResponse:
-    conversation, message, sources, run_id = complete_chat(
-        session,
-        request.app.state.settings,
-        request.app.state.worker.vector_store,
-        current_user,
-        payload.knowledge_base_id,
-        payload.message,
-        payload.conversation_id,
-    )
-    response = build_chat_response(conversation, message, sources, run_id)
+    if payload.stream:
+        prepared = prepare_chat(
+            session,
+            request.app.state.settings,
+            request.app.state.worker.vector_store,
+            current_user,
+            payload.knowledge_base_id,
+            payload.message,
+            payload.conversation_id,
+        )
+        conversation, message, sources, run_id, ai_trace = (
+            prepared.conversation,
+            prepared.message,
+            prepared.sources,
+            prepared.run_id,
+            prepared.ai_trace,
+        )
+    else:
+        conversation, message, sources, run_id, ai_trace = complete_chat(
+            session,
+            request.app.state.settings,
+            request.app.state.worker.vector_store,
+            current_user,
+            payload.knowledge_base_id,
+            payload.message,
+            payload.conversation_id,
+        )
+    response = build_chat_response(conversation, message, sources, run_id, ai_trace)
     if not payload.stream:
         return response
 
@@ -61,7 +87,7 @@ def chat_completion(
         payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
         return f"event: {event}\ndata: {payload}\n\n".encode()
 
-    async def events() -> AsyncIterable[bytes]:
+    def events() -> Iterable[bytes]:
         yield encode_event(
             "meta",
             {
@@ -70,21 +96,38 @@ def chat_completion(
                 "run_id": response.run_id,
             },
         )
-        for index in range(0, len(response.answer), 12):
-            if run_id in request.app.state.cancelled_runs:
-                yield encode_event("done", {"cancelled": True})
-                return
-            yield encode_event("delta", {"content": response.answer[index : index + 12]})
+        for step in prepared.ai_trace:
+            if step.stage != "grounding":
+                yield encode_event("trace", step.model_dump())
+        try:
+            for token in stream_prepared_chat(
+                session,
+                request.app.state.settings,
+                prepared,
+                lambda: run_id in request.app.state.cancelled_runs,
+            ):
+                yield encode_event("delta", {"content": token})
+        except Exception:
+            generation = next(step for step in prepared.ai_trace if step.stage == "generation")
+            yield encode_event("trace", generation.model_dump())
+            yield encode_event("error", {"code": "generation_failed", "message": "回答生成失败"})
+            return
         yield encode_event(
             "sources", {"sources": [source.model_dump() for source in response.sources]}
         )
+        generation = next(step for step in prepared.ai_trace if step.stage == "generation")
+        grounding = next(step for step in prepared.ai_trace if step.stage == "grounding")
+        yield encode_event("trace", generation.model_dump())
+        yield encode_event("trace", grounding.model_dump())
         yield encode_event(
             "done",
             {
                 "fallback": response.fallback,
                 "transfer_suggested": response.transfer_suggested,
+                "cancelled": run_id in request.app.state.cancelled_runs,
             },
         )
+        request.app.state.cancelled_runs.discard(run_id)
 
     return StreamingResponse(events(), media_type="text/event-stream")
 
@@ -104,6 +147,17 @@ def conversation_history(
     conversation = session.get(Conversation, conversation_id)
     if not conversation or conversation.user_id != current_user.id:
         raise AppError(404, "conversation_not_found", "会话不存在")
+    trace_events = session.scalars(
+        select(BehaviorEvent).where(
+            BehaviorEvent.user_id == current_user.id,
+            BehaviorEvent.event_type == "chat",
+        )
+    ).all()
+    traces_by_message_id = {
+        event.payload.get("message_id"): event.payload.get("ai_trace", [])
+        for event in trace_events
+        if event.payload.get("message_id")
+    }
     messages = [
         MessageResponse(
             id=message.id,
@@ -112,6 +166,7 @@ def conversation_history(
             fallback=message.fallback,
             created_at=message.created_at,
             sources=[SourceResponse.model_validate(source) for source in message.sources],
+            ai_trace=traces_by_message_id.get(message.id, []),
         )
         for message in conversation.messages
     ]

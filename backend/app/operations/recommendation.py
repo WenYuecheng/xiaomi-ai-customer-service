@@ -1,5 +1,7 @@
+import hashlib
 import json
 from collections import Counter
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -11,6 +13,13 @@ from sqlalchemy.orm import Session
 from app.db.models import BehaviorEvent, DocumentChunk, RecommendationTrainingRun
 from app.ingestion.parsers import extract_product_models
 from app.operations.schemas import RecommendationItem, RecommendationList
+
+
+@dataclass
+class TrainingOutcome:
+    run: RecommendationTrainingRun
+    metadata: dict
+    changed: bool
 
 
 def recommend(session: Session, user_id: str, knowledge_base_id: str) -> RecommendationList:
@@ -50,19 +59,57 @@ def recommend(session: Session, user_id: str, knowledge_base_id: str) -> Recomme
     return RecommendationList(items=items[:10], cold_start=not bool(preferences))
 
 
-def train_recommender(session: Session, artifact_dir) -> RecommendationTrainingRun:
-    products = ["小米 14", "Redmi K70", "米家 P10", "小米 14 Ultra", "Redmi K70 Pro"]
-    matrix = np.array(
-        [
-            [5, 1, 0, 4, 0],
-            [0, 5, 1, 0, 4],
-            [1, 0, 5, 0, 0],
-            [4, 2, 0, 5, 1],
-            [0, 4, 1, 0, 5],
-            [2, 1, 4, 0, 0],
-        ],
-        dtype=float,
+def train_recommender(session: Session, artifact_dir, target: str = "balanced") -> TrainingOutcome:
+    user_preferences: dict[str, Counter[str]] = {}
+    for event in session.scalars(select(BehaviorEvent).where(BehaviorEvent.event_type == "chat")):
+        models = extract_product_models(str(event.payload.get("question", "")))
+        if models:
+            user_preferences.setdefault(event.user_id, Counter()).update(models)
+    eligible = {user_id: counts for user_id, counts in user_preferences.items() if len(counts) >= 2}
+    observed_products = sorted({product for counts in eligible.values() for product in counts})
+    if len(eligible) >= 2 and len(observed_products) >= 3:
+        products = observed_products
+        matrix = np.array(
+            [[counts[product] for product in products] for counts in eligible.values()],
+            dtype=float,
+        )
+        dataset_name = "observed-user-behavior"
+    else:
+        products = ["小米 14", "Redmi K70", "米家 P10", "小米 14 Ultra", "Redmi K70 Pro"]
+        matrix = np.array(
+            [
+                [5, 1, 0, 4, 0],
+                [0, 5, 1, 0, 4],
+                [1, 0, 5, 0, 0],
+                [4, 2, 0, 5, 1],
+                [0, 4, 1, 0, 5],
+                [2, 1, 4, 0, 0],
+            ],
+            dtype=float,
+        )
+        dataset_name = "clearly-labelled-demo-interactions"
+    fingerprint_payload = json.dumps(
+        {
+            "dataset": dataset_name,
+            "products": products,
+            "matrix": matrix.tolist(),
+            "target": target,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
     )
+    data_fingerprint = hashlib.sha256(fingerprint_payload.encode()).hexdigest()
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    latest = session.scalar(
+        select(RecommendationTrainingRun).order_by(RecommendationTrainingRun.created_at.desc())
+    )
+    if latest and latest.artifact_filename:
+        latest_path = artifact_dir / latest.artifact_filename
+        if latest_path.exists():
+            latest_artifact = json.loads(latest_path.read_text(encoding="utf-8"))
+            if latest_artifact.get("data_fingerprint") == data_fingerprint:
+                return TrainingOutcome(run=latest, metadata=latest_artifact, changed=False)
+
     train = matrix.copy()
     held_out: list[tuple[int, int]] = []
     for user_index, row in enumerate(train):
@@ -70,12 +117,14 @@ def train_recommender(session: Session, artifact_dir) -> RecommendationTrainingR
         item_index = int(positive[-1])
         held_out.append((user_index, item_index))
         row[item_index] = 0
-    model = TruncatedSVD(n_components=3, random_state=42)
+    component_count = max(1, min(3, min(train.shape) - 1))
+    model = TruncatedSVD(n_components=component_count, random_state=42)
     user_factors = model.fit_transform(train)
     predictions = user_factors @ model.components_
     hits = 0
     failures: list[dict] = []
-    k = 3
+    requested_k = {"precision": 1, "balanced": 3, "recall": 5}[target]
+    k = min(requested_k, len(products))
     for user_index, expected_item in held_out:
         predictions[user_index][train[user_index] > 0] = -np.inf
         top_items = np.argsort(predictions[user_index])[-k:][::-1]
@@ -91,6 +140,18 @@ def train_recommender(session: Session, artifact_dir) -> RecommendationTrainingR
             )
     precision = hits / (len(held_out) * k)
     recall = hits / len(held_out)
+    metric_delta = {
+        "precision": (
+            round(precision - latest.precision_at_k, 4)
+            if latest and latest.precision_at_k is not None
+            else None
+        ),
+        "recall": (
+            round(recall - latest.recall_at_k, 4)
+            if latest and latest.recall_at_k is not None
+            else None
+        ),
+    }
     run_id = str(uuid4())
     version = datetime.now(UTC).strftime("svd-%Y%m%d%H%M%S") + f"-{run_id[:6]}"
     artifact_filename = f"{version}.json"
@@ -101,9 +162,14 @@ def train_recommender(session: Session, artifact_dir) -> RecommendationTrainingR
         "singular_values": model.singular_values_.round(6).tolist(),
         "precision_at_3": precision,
         "recall_at_3": recall,
-        "dataset": "clearly-labelled-demo-interactions",
+        "dataset": dataset_name,
+        "target": target,
+        "k": k,
+        "sample_count": int(matrix.shape[0]),
+        "product_count": len(products),
+        "data_fingerprint": data_fingerprint,
+        "metric_delta": metric_delta,
     }
-    artifact_dir.mkdir(parents=True, exist_ok=True)
     (artifact_dir / artifact_filename).write_text(
         json.dumps(artifact, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -120,4 +186,4 @@ def train_recommender(session: Session, artifact_dir) -> RecommendationTrainingR
     session.add(training_run)
     session.commit()
     session.refresh(training_run)
-    return training_run
+    return TrainingOutcome(run=training_run, metadata=artifact, changed=True)

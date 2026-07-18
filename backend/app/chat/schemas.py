@@ -20,6 +20,16 @@ class SourceResponse(BaseModel):
     location: str
     snippet: str
     score: float
+    source_url: str | None = None
+
+
+class AiTraceStep(BaseModel):
+    stage: Literal["understanding", "retrieval", "generation", "grounding"]
+    status: Literal["running", "completed", "skipped", "degraded", "failed"]
+    engine: str
+    model: str
+    duration_ms: int | None = None
+    summary: str
 
 
 class ChatResponse(BaseModel):
@@ -30,6 +40,7 @@ class ChatResponse(BaseModel):
     sources: list[SourceResponse]
     fallback: bool
     transfer_suggested: bool
+    ai_trace: list[AiTraceStep] = Field(default_factory=list)
 
 
 class MessageResponse(BaseModel):
@@ -40,7 +51,8 @@ class MessageResponse(BaseModel):
     content: str
     fallback: bool
     created_at: datetime
-    sources: list[SourceResponse] = []
+    sources: list[SourceResponse] = Field(default_factory=list)
+    ai_trace: list[AiTraceStep] = Field(default_factory=list)
 
 
 class ConversationResponse(BaseModel):

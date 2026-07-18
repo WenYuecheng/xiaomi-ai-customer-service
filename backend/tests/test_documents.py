@@ -147,3 +147,34 @@ def test_duplicate_upload_is_rejected(client: TestClient, users: dict[str, str])
     assert first.status_code == 202
     assert second.status_code == 409
     assert second.json()["error"]["code"] == "document_exists"
+
+
+def test_jobs_can_be_filtered_by_document(client: TestClient, users: dict[str, str]) -> None:
+    headers = auth_headers(client, "operator", users["operator"])
+    knowledge_base_id = create_knowledge_base(client, headers)
+    upload = client.post(
+        "/api/v1/documents/upload",
+        headers=headers,
+        data={"knowledge_base_id": knowledge_base_id},
+        files={"file": ("jobs.txt", BytesIO("任务列表测试".encode()), "text/plain")},
+    ).json()
+
+    response = client.get(f"/api/v1/jobs?document_id={upload['document_id']}", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 1
+    assert response.json()["items"][0]["id"] == upload["job_id"]
+
+
+def test_source_url_rejects_non_http_schemes(client: TestClient, users: dict[str, str]) -> None:
+    headers = auth_headers(client, "operator", users["operator"])
+    knowledge_base_id = create_knowledge_base(client, headers)
+
+    response = client.post(
+        "/api/v1/documents/upload",
+        headers=headers,
+        data={"knowledge_base_id": knowledge_base_id, "source_url": "javascript:alert(1)"},
+        files={"file": ("unsafe.md", BytesIO("安全测试".encode()), "text/markdown")},
+    )
+
+    assert response.status_code == 422

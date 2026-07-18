@@ -1,3 +1,4 @@
+import json
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query, Request, Response, status
@@ -13,10 +14,11 @@ from app.db.models import (
     Message,
     MessageRole,
     MockOrder,
+    RecommendationTrainingRun,
     Ticket,
 )
 from app.ingestion.parsers import extract_product_models
-from app.operations.analytics import build_user_profile, hot_topics
+from app.operations.analytics import build_user_profile, hot_topic_heatmap, hot_topics
 from app.operations.recommendation import recommend, train_recommender
 from app.operations.schemas import (
     AuditEventResponse,
@@ -27,11 +29,33 @@ from app.operations.schemas import (
     RecommendationList,
     TicketCreate,
     TicketResponse,
+    TicketUpdate,
+    TrainingRequest,
     TrainingRunResponse,
     UserProfileResponse,
 )
 
 router = APIRouter(tags=["operations"])
+
+
+def training_response(run, metadata: dict, *, changed: bool) -> TrainingRunResponse:
+    payload = TrainingRunResponse.model_validate(run).model_dump()
+    k = int(metadata.get("k", 3))
+    payload.update(
+        target=metadata.get("target", "balanced"),
+        k=k,
+        dataset_name=metadata.get("dataset", "unknown"),
+        sample_count=int(metadata.get("sample_count", 0)),
+        product_count=int(metadata.get("product_count", 0)),
+        data_fingerprint=metadata.get("data_fingerprint", ""),
+        changed=changed,
+        metric_delta=metadata.get("metric_delta", {}),
+        explanation=(
+            f"使用每位用户留出 1 个已咨询产品的方式评估，"
+            f"Precision@{k} 表示推荐位的准确程度，Recall@{k} 表示找回偏好产品的比例。"
+        ),
+    )
+    return TrainingRunResponse.model_validate(payload)
 
 
 @router.get("/mock/orders")
@@ -47,6 +71,16 @@ def create_ticket(
     conversation = session.get(Conversation, payload.conversation_id)
     if not conversation or conversation.user_id != current_user.id:
         raise AppError(404, "conversation_not_found", "会话不存在")
+    existing = session.scalar(
+        select(Ticket)
+        .where(
+            Ticket.conversation_id == conversation.id,
+            Ticket.user_id == current_user.id,
+        )
+        .order_by(Ticket.created_at.asc())
+    )
+    if existing:
+        return TicketResponse.model_validate(existing)
     transcript = "\n".join(
         f"{message.role.value}: {message.content}" for message in conversation.messages
     )
@@ -80,13 +114,34 @@ def list_tickets(session: SessionDep, _current_user: AdminOrOperatorDep) -> list
     ]
 
 
+@router.patch("/tickets/{ticket_id}")
+def update_ticket(
+    ticket_id: str,
+    payload: TicketUpdate,
+    session: SessionDep,
+    _current_user: AdminOrOperatorDep,
+) -> TicketResponse:
+    ticket = session.get(Ticket, ticket_id)
+    if not ticket:
+        raise AppError(404, "ticket_not_found", "工单不存在")
+    for field, value in payload.model_dump(exclude_none=True).items():
+        setattr(ticket, field, value)
+    session.commit()
+    session.refresh(ticket)
+    return TicketResponse.model_validate(ticket)
+
+
 @router.get("/operations/hot-topics")
 def get_hot_topics(
     session: SessionDep,
     _current_user: AdminOrOperatorDep,
     window: Annotated[Literal["day", "week", "month"], Query()] = "day",
 ) -> HotTopicList:
-    return HotTopicList(window=window, items=hot_topics(session, window))
+    return HotTopicList(
+        window=window,
+        items=hot_topics(session, window),
+        heatmap=hot_topic_heatmap(session, window),
+    )
 
 
 @router.get("/operations/profile/me")
@@ -112,10 +167,36 @@ def get_recommendations(
 
 @router.post("/recommendation/training-runs", status_code=201)
 def create_training_run(
-    request: Request, session: SessionDep, _current_user: AdminOrOperatorDep
+    request: Request,
+    session: SessionDep,
+    _current_user: AdminOrOperatorDep,
+    payload: TrainingRequest | None = None,
 ) -> TrainingRunResponse:
-    run = train_recommender(session, request.app.state.settings.model_artifact_dir)
-    return TrainingRunResponse.model_validate(run)
+    target = payload.target if payload else "balanced"
+    outcome = train_recommender(
+        session,
+        request.app.state.settings.model_artifact_dir,
+        target,
+    )
+    return training_response(outcome.run, outcome.metadata, changed=outcome.changed)
+
+
+@router.get("/recommendation/training-runs")
+def list_training_runs(
+    request: Request, session: SessionDep, _current_user: AdminOrOperatorDep
+) -> list[TrainingRunResponse]:
+    statement = select(RecommendationTrainingRun).order_by(
+        RecommendationTrainingRun.created_at.desc()
+    )
+    responses = []
+    for run in session.scalars(statement):
+        metadata = {}
+        if run.artifact_filename:
+            path = request.app.state.settings.model_artifact_dir / run.artifact_filename
+            if path.exists():
+                metadata = json.loads(path.read_text(encoding="utf-8"))
+        responses.append(training_response(run, metadata, changed=True))
+    return responses
 
 
 @router.get("/operations/logs")

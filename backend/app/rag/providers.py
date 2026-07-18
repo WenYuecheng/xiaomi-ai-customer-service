@@ -1,7 +1,9 @@
-from typing import Protocol
+from collections.abc import Iterator
+from typing import Literal, Protocol
 
 from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
+from pydantic import BaseModel, Field, model_validator
 
 from app.core.config import Settings
 
@@ -11,29 +13,192 @@ SYSTEM_PROMPT = """你是小米产品客服。只能依据给定知识片段回�
 {context}
 """
 
+ANALYSIS_PROMPT = """你是客服问题理解模块。请结合会话摘要和最近消息理解当前问题。
+必须只返回符合 JSON schema 的对象，不要回答用户问题，也不要输出分析过程。
+intent 只能是：knowledge_query、product_comparison、purchase_advice、troubleshooting、
+order_query、human_transfer、general_chat。
+rewritten_question 应补全省略的产品型号，成为可独立检索的问题。
+product_models 只填写用户明确提到或可由会话明确继承的具体型号。
+产品知识、产品对比、选购建议和故障诊断需要检索；订单、转人工和寒暄不需要检索。
+"""
+
+
+class QuestionAnalysis(BaseModel):
+    intent: Literal[
+        "knowledge_query",
+        "product_comparison",
+        "purchase_advice",
+        "troubleshooting",
+        "order_query",
+        "human_transfer",
+        "general_chat",
+    ]
+    rewritten_question: str = Field(min_length=1, max_length=4000)
+    product_models: list[str] = Field(default_factory=list)
+    need_retrieval: bool | None = None
+    confidence: float = Field(default=0.8, ge=0, le=1)
+
+    @model_validator(mode="after")
+    def infer_safe_retrieval_default(self) -> "QuestionAnalysis":
+        if self.need_retrieval is None:
+            self.need_retrieval = self.intent in {
+                "knowledge_query",
+                "product_comparison",
+                "purchase_advice",
+                "troubleshooting",
+            }
+        return self
+
 
 class ChatProvider(Protocol):
-    def generate(self, question: str, contexts: list[str], summary: str | None = None) -> str: ...
+    def analyze(
+        self,
+        question: str,
+        summary: str | None = None,
+        recent_messages: list[dict[str, str]] | None = None,
+    ) -> QuestionAnalysis: ...
+
+    def generate(
+        self,
+        question: str,
+        contexts: list[str],
+        summary: str | None = None,
+        recent_messages: list[dict[str, str]] | None = None,
+    ) -> str: ...
+
+    def stream(
+        self,
+        question: str,
+        contexts: list[str],
+        summary: str | None = None,
+        recent_messages: list[dict[str, str]] | None = None,
+    ) -> Iterator[str]: ...
 
 
 class MockChatProvider:
-    def generate(self, question: str, contexts: list[str], summary: str | None = None) -> str:
-        del question, summary
+    def analyze(
+        self,
+        question: str,
+        summary: str | None = None,
+        recent_messages: list[dict[str, str]] | None = None,
+    ) -> QuestionAnalysis:
+        del summary
+        lowered = question.lower()
+        if any(word in question for word in ("转人工", "人工客服", "人工处理")):
+            intent = "human_transfer"
+        elif any(word in question for word in ("订单", "物流", "快递", "发货")):
+            intent = "order_query"
+        elif any(word in lowered for word in ("你好", "谢谢", "hello")):
+            intent = "general_chat"
+        elif any(word in question for word in ("对比", "区别", "相比")):
+            intent = "product_comparison"
+        elif any(word in question for word in ("推荐", "选购", "怎么选")):
+            intent = "purchase_advice"
+        elif any(word in question for word in ("故障", "无法", "不能", "异常")):
+            intent = "troubleshooting"
+        else:
+            intent = "knowledge_query"
+        rewritten = question
+        if any(marker in question for marker in ("它", "这个", "该型号", "那款")):
+            previous_users = [
+                item["content"] for item in (recent_messages or []) if item["role"] == "user"
+            ]
+            if previous_users:
+                rewritten = f"{previous_users[-1]}；追问：{question}"
+        return QuestionAnalysis(
+            intent=intent,
+            rewritten_question=rewritten,
+            product_models=[],
+            need_retrieval=intent
+            in {"knowledge_query", "product_comparison", "purchase_advice", "troubleshooting"},
+            confidence=1.0,
+        )
+
+    def generate(
+        self,
+        question: str,
+        contexts: list[str],
+        summary: str | None = None,
+        recent_messages: list[dict[str, str]] | None = None,
+    ) -> str:
+        del question, summary, recent_messages
         return f"根据知识库，{contexts[0]}"
+
+    def stream(
+        self,
+        question: str,
+        contexts: list[str],
+        summary: str | None = None,
+        recent_messages: list[dict[str, str]] | None = None,
+    ) -> Iterator[str]:
+        yield self.generate(question, contexts, summary, recent_messages)
 
 
 class LangChainChatProvider:
     def __init__(self, model) -> None:
         self.model = model
 
-    def generate(self, question: str, contexts: list[str], summary: str | None = None) -> str:
+    def analyze(
+        self,
+        question: str,
+        summary: str | None = None,
+        recent_messages: list[dict[str, str]] | None = None,
+    ) -> QuestionAnalysis:
+        structured_model = self.model.with_structured_output(
+            QuestionAnalysis,
+            method="json_mode",
+        )
+        context = []
+        if summary:
+            context.append({"role": "system", "content": f"会话摘要：{summary}"})
+        context.extend((recent_messages or [])[-20:])
+        return structured_model.invoke(
+            [
+                {"role": "system", "content": ANALYSIS_PROMPT},
+                *context,
+                {"role": "user", "content": question},
+            ]
+        )
+
+    def generate(
+        self,
+        question: str,
+        contexts: list[str],
+        summary: str | None = None,
+        recent_messages: list[dict[str, str]] | None = None,
+    ) -> str:
         prompt = SYSTEM_PROMPT.format(context="\n\n".join(contexts))
         if summary:
             prompt += f"\n历史摘要：{summary}"
+        history = (recent_messages or [])[-20:]
         response = self.model.invoke(
-            [{"role": "system", "content": prompt}, {"role": "user", "content": question}]
+            [
+                {"role": "system", "content": prompt},
+                *history,
+                {"role": "user", "content": question},
+            ]
         )
         return str(response.content)
+
+    def stream(
+        self,
+        question: str,
+        contexts: list[str],
+        summary: str | None = None,
+        recent_messages: list[dict[str, str]] | None = None,
+    ) -> Iterator[str]:
+        prompt = SYSTEM_PROMPT.format(context="\n\n".join(contexts))
+        if summary:
+            prompt += f"\n历史摘要：{summary}"
+        messages = [
+            {"role": "system", "content": prompt},
+            *(recent_messages or [])[-20:],
+            {"role": "user", "content": question},
+        ]
+        for chunk in self.model.stream(messages):
+            content = str(chunk.content)
+            if content:
+                yield content
 
 
 def create_chat_provider(settings: Settings) -> ChatProvider:

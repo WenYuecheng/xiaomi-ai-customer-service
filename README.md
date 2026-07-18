@@ -38,6 +38,7 @@ docker compose up --build
 ```bash
 cd backend
 uv sync --extra dev
+uv run alembic upgrade head
 uv run python -m app.commands init-demo
 uv run fastapi dev
 ```
@@ -78,8 +79,9 @@ OLLAMA_BASE_URL=http://host.docker.internal:11434
 ## 测试与质量检查
 
 ```bash
-uv run --project backend ruff check backend/app backend/tests
-uv run --project backend pytest backend/tests --cov=app
+uv run --project backend --extra dev ruff format --check backend/app backend/tests scripts
+uv run --project backend --extra dev ruff check backend/app backend/tests scripts
+LLM_PROVIDER=mock EMBEDDING_PROVIDER=mock uv run --project backend --extra dev pytest backend/tests --cov=app
 cd frontend && pnpm test && pnpm build
 ```
 
@@ -112,3 +114,7 @@ jira/      Jira 导入与验收证据
 ```
 
 完整接口以 Swagger 为准；所有业务 API 统一位于 `/api/v1`。
+
+## 当前范围边界
+
+订单与物流为明确标识的 Mock 演示数据。系统没有连接真实小米账户、支付、退款、售后、维修网点或多渠道平台；这些能力需要官方接口、授权与测试环境，不能用模拟结果冒充真实接入。DeepSeek 可通过 OpenAI-compatible 配置真实调用，BGE 可通过 `EMBEDDING_PROVIDER=bge` 本地运行。

@@ -18,7 +18,7 @@ function submit(): void {
     <el-input
       v-model="text"
       type="textarea"
-      :rows="3"
+      :autosize="{ minRows: 1, maxRows: 6 }"
       resize="none"
       maxlength="4000"
       show-word-limit
@@ -34,8 +34,7 @@ function submit(): void {
 </template>
 
 <style scoped>
-.composer { background: white; border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 18px 40px rgba(22, 24, 29, .08); padding: 12px; }
+.composer { background: rgba(255,255,255,.86); border: 1px solid #ddd4f0; border-radius: 20px; box-shadow: 0 22px 54px rgba(62,43,115,.12); padding: 12px; backdrop-filter: blur(18px); }
 .composer__footer { align-items: center; display: flex; justify-content: space-between; padding: 10px 2px 0; }
 .composer__footer span { color: var(--ink-muted); font-size: 12px; }
 </style>
-

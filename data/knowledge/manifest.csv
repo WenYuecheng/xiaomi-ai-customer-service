@@ -1,0 +1,47 @@
+id,category,product_models,url
+xiaomi-14,手机,小米 14,https://www.mi.com/global/product/xiaomi-14/
+service-center,售后服务,,https://www.mi.com/service
+service-policy,售后服务,,https://order.mi.com/service/security
+service-index,售后服务,,https://www.mi.com/service/index.html
+service-exchange,售后服务,,https://www.mi.com/c/service/exchange
+service-pricing,售后服务,,https://www.mi.com/service/exchange/materialprice
+service-help,售后服务,,https://www.mi.com/c/service/help/index.html
+service-phone,售后服务,小米手机,https://www.mi.com/c/service/miphone
+service-online,售后服务,,https://www.mi.com/c/service
+service-damage,售后服务,小米手机|小米平板,https://www.mi.com/c/service/damage/index.html
+phone-rom-failure,故障排查,小米手机,https://www.mi.com/service/support/rom_fail
+redmi-k80,手机,REDMI K80,https://www.mi.com/prod/redmi-k80
+redmi-k80-specs,手机,REDMI K80,https://www.mi.com/prod/redmi-k80/specs
+redmi-k80-pro-specs,手机,REDMI K80 Pro,https://www.mi.com/prod/redmi-k80-pro/specs
+xiaomi-15-custom,手机,Xiaomi 15,https://www.mi.com/prod/xiaomi-15-custom-version
+xiaomi-pad-7,平板电脑,Xiaomi Pad 7,https://www.mi.com/prod/xiaomi-pad-7
+xiaomi-pad-7-specs,平板电脑,Xiaomi Pad 7,https://www.mi.com/prod/xiaomi-pad-7/specs
+band-9,智能穿戴,小米手环9,https://www.mi.com/prod/xiaomi-shouhuan-9
+band-9-specs,智能穿戴,小米手环9,https://www.mi.com/prod/xiaomi-shouhuan-9/specs
+band-9-nfc,智能穿戴,小米手环9 NFC,https://www.mi.com/prod/xiaomi-shouhuan-9-nfc
+watch-s4,智能穿戴,Xiaomi Watch S4,https://www.mi.com/prod/xiaomi-watchS4
+watch-s4-specs,智能穿戴,Xiaomi Watch S4,https://www.mi.com/prod/xiaomi-watchS4/specs
+watch-s4-esim,智能穿戴,Xiaomi Watch S4,https://www.mi.com/prod/xiaomi-watchS4/eSIM
+watch-s4-water,智能穿戴,Xiaomi Watch S4,https://www.mi.com/prod/xiaomi-watchS4/water-proof
+watch-s4-city,智能穿戴,Xiaomi Watch S4,https://www.mi.com/prod/xiaomi-watchS4/city
+watch-s4-41,智能穿戴,Xiaomi Watch S4 41mm,https://www.mi.com/prod/xiaomi-watch-s4-41mm
+watch-s4-41-specs,智能穿戴,Xiaomi Watch S4 41mm,https://www.mi.com/prod/xiaomi-watch-s4-41mm/specs
+watch-s4-41-water,智能穿戴,Xiaomi Watch S4 41mm,https://www.mi.com/prod/xiaomi-watch-s4-41mm/water-proof
+robot-vacuum,清洁电器,米家扫地机器人,https://www.mi.com/roomrobot
+robot-vacuum-specs,清洁电器,米家扫地机器人,https://www.mi.com/roomrobot/specs
+robot-vacuum-cleaning,清洁电器,米家扫地机器人,https://www.mi.com/roomrobot/csystem
+robot-vacuum-design,清洁电器,米家扫地机器人,https://www.mi.com/roomrobot/explain
+mijia-robot-specs,清洁电器,米家全能扫拖机器人,https://www.mi.com/mjrobot/specs
+air-purifier,生活电器,小米空气净化器,https://www.mi.com/air/specs
+air-purifier-2s,生活电器,米家空气净化器 2S,https://www.mi.com/air2s/specs
+air-purifier-max,生活电器,米家空气净化器 MAX,https://www.mi.com/airmax/specs
+air-purifier-pro,生活电器,米家空气净化器 Pro,https://www.mi.com/airpro
+air-purifier-pro-tech,生活电器,米家空气净化器 Pro,https://www.mi.com/airpro/princ
+ac-controller,智能家居,米家空调伴侣,https://www.mi.com/ac-controller
+ac-controller-specs,智能家居,米家空调伴侣,https://www.mi.com/ac-controller/specs
+mijia-air-conditioner,生活电器,米家空调,https://www.mi.com/aircondition/f3w1
+mijia-air-conditioner-pro,生活电器,米家空调,https://www.mi.com/mijia-air-cond-cabinets/save-electricity-pro/specs
+whole-home-router,网络设备,Xiaomi全屋路由,https://www.mi.com/xiaomi-routers/whole-room/specs
+mi-tv-host,影音设备,小米电视主机,https://www.mi.com/tvzj/specs
+mi-tv-4-49,影音设备,小米电视4 49英寸,https://www.mi.com/mitv4/49/specs
+mi-tv-2-55,影音设备,小米电视2 55英寸,https://www.mi.com/mitv55/techspeces

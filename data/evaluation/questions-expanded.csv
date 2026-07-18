@@ -1,0 +1,115 @@
+﻿id,question,expected_keywords,source_file
+Q01,Xiaomi 14 的屏幕尺寸是多少,6.36,xiaomi-14.md
+Q02,Xiaomi 14 支持多少瓦有线快充,90W,xiaomi-14.md
+Q03,Xiaomi 14 的电池容量是多少,4610mAh,xiaomi-14.md
+Q04,T12 最大吸力是多少,3500Pa,robot-vacuum-t12.md
+Q05,T12 标准模式能清扫多久,130分钟,robot-vacuum-t12.md
+Q06,T12 使用什么导航方式,LDS|激光导航,robot-vacuum-t12.md
+Q07,T12 的型号是什么,B106GL,robot-vacuum-t12-specs.md
+Q08,T12 的额定功率是多少,45W,robot-vacuum-t12-specs.md
+Q09,T12 的净重是多少,4.8kg,robot-vacuum-t12-specs.md
+Q10,X20 最大吸力是多少,5000Pa,robot-vacuum-x20.md
+Q11,X20 尘盒容量是多少,430mL,robot-vacuum-x20.md
+Q12,X20 电池容量是多少,5200mAh,robot-vacuum-x20.md
+Q13,X10 最大吸力是多少,4000Pa,robot-vacuum-x10.md
+Q14,X10 最长清扫时间是多少,180分钟,robot-vacuum-x10.md
+Q15,X10 水箱容量是多少,200mL,robot-vacuum-x10.md
+Q16,X20 Pro 最大吸力是多少,7000Pa,robot-vacuum-x20-pro.md
+Q17,X20 Pro 清水箱容量是多少,4L,robot-vacuum-x20-pro.md
+Q18,X20 Pro 污水箱容量是多少,3.8L,robot-vacuum-x20-pro.md
+Q19,Robot Vacuum 5 最大吸力是多少,20000Pa,robot-vacuum-5.md
+Q20,Robot Vacuum 5 最低可进入多高的空间,9.5cm,robot-vacuum-5.md
+Q21,Robot Vacuum 5 能连续清扫多久,140分钟,robot-vacuum-5.md
+Q22,Smart Band 7 屏幕尺寸是多少,1.62英寸,smart-band-7.md
+Q23,Smart Band 7 防水等级是多少,5ATM,smart-band-7.md
+Q24,Smart Band 7 典型续航多久,14天,smart-band-7.md
+Q25,Smart Band 9 峰值亮度是多少,1200尼特,smart-band-9.md
+Q26,Smart Band 9 典型续航多久,21天,smart-band-9.md
+Q27,Smart Band 9 支持最低哪个 Android 版本,Android 8.0,smart-band-9.md
+Q28,Smart Band 10 屏幕尺寸是多少,1.72英寸,smart-band-10.md
+Q29,Smart Band 10 支持多少运动模式,150+,smart-band-10.md
+Q30,Smart Band 10 的屏占比是多少,73%,smart-band-10.md
+Q031,根据小米官方资料，请介绍售后服务。,售后服务,service-center-01.md
+Q032,售后服务有哪些核心规格、功能或服务说明？,售后服务,service-center-01.md
+Q033,根据小米官方资料，请介绍售后服务。,售后服务,service-policy-01.md
+Q034,售后服务有哪些核心规格、功能或服务说明？,售后服务,service-policy-01.md
+Q035,根据小米官方资料，请介绍售后服务。,售后服务,service-index-01.md
+Q036,售后服务有哪些核心规格、功能或服务说明？,售后服务,service-index-01.md
+Q037,根据小米官方资料，请介绍售后服务。,售后服务,service-exchange-01.md
+Q038,售后服务有哪些核心规格、功能或服务说明？,售后服务,service-exchange-01.md
+Q039,根据小米官方资料，请介绍售后服务。,售后服务,service-pricing-01.md
+Q040,售后服务有哪些核心规格、功能或服务说明？,售后服务,service-pricing-01.md
+Q041,根据小米官方资料，请介绍售后服务。,售后服务,service-help-01.md
+Q042,售后服务有哪些核心规格、功能或服务说明？,售后服务,service-help-01.md
+Q043,根据小米官方资料，请介绍小米手机。,小米手机,service-phone-01.md
+Q044,小米手机有哪些核心规格、功能或服务说明？,小米手机,service-phone-01.md
+Q045,根据小米官方资料，请介绍售后服务。,售后服务,service-online-01.md
+Q046,售后服务有哪些核心规格、功能或服务说明？,售后服务,service-online-01.md
+Q047,根据小米官方资料，请介绍小米手机。,小米手机,service-damage-01.md
+Q048,小米手机有哪些核心规格、功能或服务说明？,小米手机,service-damage-01.md
+Q049,根据小米官方资料，请介绍小米手机。,小米手机,phone-rom-failure-01.md
+Q050,小米手机有哪些核心规格、功能或服务说明？,小米手机,phone-rom-failure-01.md
+Q051,根据小米官方资料，请介绍REDMI K80。,REDMI K80,redmi-k80-01.md
+Q052,REDMI K80有哪些核心规格、功能或服务说明？,REDMI K80,redmi-k80-01.md
+Q053,根据小米官方资料，请介绍REDMI K80。,REDMI K80,redmi-k80-specs-01.md
+Q054,REDMI K80有哪些核心规格、功能或服务说明？,REDMI K80,redmi-k80-specs-01.md
+Q055,根据小米官方资料，请介绍REDMI K80 Pro。,REDMI K80 Pro,redmi-k80-pro-specs-01.md
+Q056,REDMI K80 Pro有哪些核心规格、功能或服务说明？,REDMI K80 Pro,redmi-k80-pro-specs-01.md
+Q057,根据小米官方资料，请介绍Xiaomi 15。,Xiaomi 15,xiaomi-15-custom-01.md
+Q058,Xiaomi 15有哪些核心规格、功能或服务说明？,Xiaomi 15,xiaomi-15-custom-01.md
+Q059,根据小米官方资料，请介绍Xiaomi Pad 7。,Xiaomi Pad 7,xiaomi-pad-7-01.md
+Q060,Xiaomi Pad 7有哪些核心规格、功能或服务说明？,Xiaomi Pad 7,xiaomi-pad-7-01.md
+Q061,根据小米官方资料，请介绍Xiaomi Pad 7。,Xiaomi Pad 7,xiaomi-pad-7-specs-01.md
+Q062,Xiaomi Pad 7有哪些核心规格、功能或服务说明？,Xiaomi Pad 7,xiaomi-pad-7-specs-01.md
+Q063,根据小米官方资料，请介绍小米手环9。,小米手环9,band-9-01.md
+Q064,小米手环9有哪些核心规格、功能或服务说明？,小米手环9,band-9-01.md
+Q065,根据小米官方资料，请介绍小米手环9。,小米手环9,band-9-specs-01.md
+Q066,小米手环9有哪些核心规格、功能或服务说明？,小米手环9,band-9-specs-01.md
+Q067,根据小米官方资料，请介绍小米手环9 NFC。,小米手环9 NFC,band-9-nfc-01.md
+Q068,小米手环9 NFC有哪些核心规格、功能或服务说明？,小米手环9 NFC,band-9-nfc-01.md
+Q069,根据小米官方资料，请介绍Xiaomi Watch S4。,Xiaomi Watch S4,watch-s4-01.md
+Q070,Xiaomi Watch S4有哪些核心规格、功能或服务说明？,Xiaomi Watch S4,watch-s4-01.md
+Q071,根据小米官方资料，请介绍Xiaomi Watch S4。,Xiaomi Watch S4,watch-s4-specs-01.md
+Q072,Xiaomi Watch S4有哪些核心规格、功能或服务说明？,Xiaomi Watch S4,watch-s4-specs-01.md
+Q073,根据小米官方资料，请介绍Xiaomi Watch S4。,Xiaomi Watch S4,watch-s4-esim-01.md
+Q074,Xiaomi Watch S4有哪些核心规格、功能或服务说明？,Xiaomi Watch S4,watch-s4-esim-01.md
+Q075,根据小米官方资料，请介绍Xiaomi Watch S4。,Xiaomi Watch S4,watch-s4-water-01.md
+Q076,Xiaomi Watch S4有哪些核心规格、功能或服务说明？,Xiaomi Watch S4,watch-s4-water-01.md
+Q077,根据小米官方资料，请介绍Xiaomi Watch S4。,Xiaomi Watch S4,watch-s4-city-01.md
+Q078,Xiaomi Watch S4有哪些核心规格、功能或服务说明？,Xiaomi Watch S4,watch-s4-city-01.md
+Q079,根据小米官方资料，请介绍米家扫地机器人。,米家扫地机器人,robot-vacuum-01.md
+Q080,米家扫地机器人有哪些核心规格、功能或服务说明？,米家扫地机器人,robot-vacuum-01.md
+Q081,根据小米官方资料，请介绍米家扫地机器人。,米家扫地机器人,robot-vacuum-specs-01.md
+Q082,米家扫地机器人有哪些核心规格、功能或服务说明？,米家扫地机器人,robot-vacuum-specs-01.md
+Q083,根据小米官方资料，请介绍米家扫地机器人。,米家扫地机器人,robot-vacuum-cleaning-01.md
+Q084,米家扫地机器人有哪些核心规格、功能或服务说明？,米家扫地机器人,robot-vacuum-cleaning-01.md
+Q085,根据小米官方资料，请介绍米家扫地机器人。,米家扫地机器人,robot-vacuum-design-01.md
+Q086,米家扫地机器人有哪些核心规格、功能或服务说明？,米家扫地机器人,robot-vacuum-design-01.md
+Q087,根据小米官方资料，请介绍米家全能扫拖机器人。,米家全能扫拖机器人,mijia-robot-specs-01.md
+Q088,米家全能扫拖机器人有哪些核心规格、功能或服务说明？,米家全能扫拖机器人,mijia-robot-specs-01.md
+Q089,根据小米官方资料，请介绍小米空气净化器。,小米空气净化器,air-purifier-01.md
+Q090,小米空气净化器有哪些核心规格、功能或服务说明？,小米空气净化器,air-purifier-01.md
+Q091,根据小米官方资料，请介绍米家空气净化器 2S。,米家空气净化器 2S,air-purifier-2s-01.md
+Q092,米家空气净化器 2S有哪些核心规格、功能或服务说明？,米家空气净化器 2S,air-purifier-2s-01.md
+Q093,根据小米官方资料，请介绍米家空气净化器 MAX。,米家空气净化器 MAX,air-purifier-max-01.md
+Q094,米家空气净化器 MAX有哪些核心规格、功能或服务说明？,米家空气净化器 MAX,air-purifier-max-01.md
+Q095,根据小米官方资料，请介绍米家空气净化器 Pro。,米家空气净化器 Pro,air-purifier-pro-01.md
+Q096,米家空气净化器 Pro有哪些核心规格、功能或服务说明？,米家空气净化器 Pro,air-purifier-pro-01.md
+Q097,根据小米官方资料，请介绍米家空气净化器 Pro。,米家空气净化器 Pro,air-purifier-pro-tech-01.md
+Q098,米家空气净化器 Pro有哪些核心规格、功能或服务说明？,米家空气净化器 Pro,air-purifier-pro-tech-01.md
+Q099,根据小米官方资料，请介绍米家空调伴侣。,米家空调伴侣,ac-controller-01.md
+Q100,米家空调伴侣有哪些核心规格、功能或服务说明？,米家空调伴侣,ac-controller-01.md
+Q101,根据小米官方资料，请介绍米家空调伴侣。,米家空调伴侣,ac-controller-specs-01.md
+Q102,米家空调伴侣有哪些核心规格、功能或服务说明？,米家空调伴侣,ac-controller-specs-01.md
+Q103,根据小米官方资料，请介绍米家空调。,米家空调,mijia-air-conditioner-01.md
+Q104,米家空调有哪些核心规格、功能或服务说明？,米家空调,mijia-air-conditioner-01.md
+Q105,根据小米官方资料，请介绍米家空调。,米家空调,mijia-air-conditioner-pro-01.md
+Q106,米家空调有哪些核心规格、功能或服务说明？,米家空调,mijia-air-conditioner-pro-01.md
+Q107,根据小米官方资料，请介绍Xiaomi全屋路由。,Xiaomi全屋路由,whole-home-router-01.md
+Q108,Xiaomi全屋路由有哪些核心规格、功能或服务说明？,Xiaomi全屋路由,whole-home-router-01.md
+Q109,根据小米官方资料，请介绍小米电视主机。,小米电视主机,mi-tv-host-01.md
+Q110,小米电视主机有哪些核心规格、功能或服务说明？,小米电视主机,mi-tv-host-01.md
+Q111,根据小米官方资料，请介绍小米电视4 49英寸。,小米电视4 49英寸,mi-tv-4-49-01.md
+Q112,小米电视4 49英寸有哪些核心规格、功能或服务说明？,小米电视4 49英寸,mi-tv-4-49-01.md
+Q113,根据小米官方资料，请介绍小米电视2 55英寸。,小米电视2 55英寸,mi-tv-2-55-01.md
+Q114,小米电视2 55英寸有哪些核心规格、功能或服务说明？,小米电视2 55英寸,mi-tv-2-55-01.md

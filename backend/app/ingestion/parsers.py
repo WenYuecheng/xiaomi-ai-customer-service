@@ -45,13 +45,14 @@ PRODUCT_MODEL_PATTERNS = (
     re.compile(r"(?:红米|Redmi)\s*([A-Za-z]*\s*\d+(?:\s*(?:Pro|Ultra|Max))?)", re.IGNORECASE),
     re.compile(r"Smart\s+Band\s*(\d+(?:\s*Pro)?)", re.IGNORECASE),
     re.compile(r"Robot\s+Vacuum\s*(\d+(?:\s*Pro)?)", re.IGNORECASE),
+    re.compile(r"(?:米家|Mijia)\s*([A-Za-z]*\s*\d+(?:\s*(?:Pro|Ultra|Max))?)", re.IGNORECASE),
     re.compile(r"\b([TX]\d+(?:\s*Pro)?)\b", re.IGNORECASE),
 )
 
 
 def extract_product_models(text: str) -> list[str]:
     models: set[str] = set()
-    labels = ("小米", "红米", "Smart Band", "Robot Vacuum", "")
+    labels = ("小米", "红米", "Smart Band", "Robot Vacuum", "米家", "")
     for pattern, label in zip(PRODUCT_MODEL_PATTERNS, labels, strict=True):
         for match in pattern.findall(text):
             suffix = re.sub(r"\s+", " ", match).strip()

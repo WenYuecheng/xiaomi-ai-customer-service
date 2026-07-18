@@ -37,17 +37,20 @@ class HashEmbeddings(Embeddings):
 
 
 class BgeEmbeddings(Embeddings):
-    """Lazy local BGE adapter so default installs stay lightweight."""
+    """Lazy FastEmbed adapter for a compact, CPU-only local BGE runtime."""
 
-    def __init__(self, model_name: str) -> None:
+    def __init__(self, model_name: str, cache_dir: str | Path | None = None) -> None:
         try:
-            from sentence_transformers import SentenceTransformer
+            from fastembed import TextEmbedding
         except ImportError as exc:
             raise RuntimeError("BGE embeddings require: uv sync --extra local-embeddings") from exc
-        self.model = SentenceTransformer(model_name)
+        self.model = TextEmbedding(
+            model_name=model_name,
+            cache_dir=str(cache_dir) if cache_dir is not None else None,
+        )
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return self.model.encode(texts, normalize_embeddings=True).tolist()
+        return [vector.tolist() for vector in self.model.embed(texts)]
 
     def embed_query(self, text: str) -> list[float]:
         return self.embed_documents([text])[0]
@@ -69,7 +72,10 @@ def create_embeddings(settings: Settings) -> Embeddings:
             model=settings.embedding_model,
             base_url=settings.ollama_base_url,
         )
-    return BgeEmbeddings(settings.embedding_model)
+    return BgeEmbeddings(
+        settings.embedding_model,
+        cache_dir=settings.model_artifact_dir / "fastembed",
+    )
 
 
 class VectorStoreService:

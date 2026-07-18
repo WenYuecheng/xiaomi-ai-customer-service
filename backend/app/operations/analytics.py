@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import BehaviorEvent, Feedback
 from app.ingestion.parsers import extract_product_models
-from app.operations.schemas import HotTopic, UserProfileResponse
+from app.operations.schemas import HotTopic, HotTopicHeatCell, UserProfileResponse
 
 STOP_WORDS = {"什么", "怎么", "怎么样", "是否", "可以", "支持", "一下", "这个", "那个"}
 
@@ -46,6 +46,19 @@ def hot_topics(session: Session, window: str) -> list[HotTopic]:
         HotTopic(term=term, count=round(score), score=round(score, 4))
         for term, score in counter.most_common(20)
     ]
+
+
+def hot_topic_heatmap(session: Session, window: str) -> list[HotTopicHeatCell]:
+    events = list(
+        session.scalars(
+            select(BehaviorEvent).where(
+                BehaviorEvent.event_type == "chat",
+                BehaviorEvent.created_at >= time_boundary(window),
+            )
+        )
+    )
+    counts: Counter[str] = Counter(event.created_at.date().isoformat() for event in events)
+    return [HotTopicHeatCell(date=date, count=count) for date, count in sorted(counts.items())]
 
 
 def build_user_profile(session: Session, user_id: str) -> UserProfileResponse:

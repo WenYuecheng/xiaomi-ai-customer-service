@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class MockOrderResponse(BaseModel):
@@ -18,6 +18,11 @@ class MockOrderResponse(BaseModel):
 class TicketCreate(BaseModel):
     conversation_id: str
     priority: Literal["low", "normal", "high", "urgent"] = "normal"
+
+
+class TicketUpdate(BaseModel):
+    priority: Literal["low", "normal", "high", "urgent"] | None = None
+    status: Literal["open", "in_progress", "resolved", "closed"] | None = None
 
 
 class TicketResponse(BaseModel):
@@ -40,9 +45,15 @@ class HotTopic(BaseModel):
     score: float
 
 
+class HotTopicHeatCell(BaseModel):
+    date: str
+    count: int
+
+
 class HotTopicList(BaseModel):
     window: str
     items: list[HotTopic]
+    heatmap: list[HotTopicHeatCell] = Field(default_factory=list)
 
 
 class UserProfileResponse(BaseModel):
@@ -76,6 +87,19 @@ class TrainingRunResponse(BaseModel):
     failure_examples: list[dict]
     created_at: datetime
     finished_at: datetime | None
+    target: Literal["balanced", "precision", "recall"] = "balanced"
+    k: int = 3
+    dataset_name: str = "unknown"
+    sample_count: int = 0
+    product_count: int = 0
+    data_fingerprint: str = ""
+    changed: bool = True
+    metric_delta: dict[str, float | None] = Field(default_factory=dict)
+    explanation: str = ""
+
+
+class TrainingRequest(BaseModel):
+    target: Literal["balanced", "precision", "recall"] = "balanced"
 
 
 class ConversationLogItem(BaseModel):

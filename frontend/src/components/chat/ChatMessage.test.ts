@@ -46,5 +46,39 @@ describe('ChatMessage', () => {
     expect(wrapper.text()).toContain('知识库暂无可靠答案')
     expect(wrapper.find('[data-testid="source-rail"]').exists()).toBe(false)
   })
+
+  it('shows an accessible selected state after helpful feedback', () => {
+    const wrapper = mount(ChatMessage, {
+      props: {
+        message: {
+          id: 'm3', role: 'assistant', content: '答案', fallback: false, sources: [],
+        },
+        feedbackRating: 'up',
+      },
+    })
+
+    const helpful = wrapper.get('[data-testid="feedback-up"]')
+    expect(helpful.attributes('aria-pressed')).toBe('true')
+    expect(helpful.text()).toContain('已记录')
+  })
 })
 
+it('renders a safe clickable public source URL', () => {
+  const wrapper = mount(ChatMessage, {
+    props: {
+      message: {
+        id: 'm2',
+        role: 'assistant',
+        content: '答案',
+        fallback: false,
+        sources: [{
+          document_id: 'd1', chunk_id: 'c1', filename: 'guide.md', location: '第 1 节',
+          snippet: '证据', score: 0.9, source_url: 'https://www.mi.com/example',
+        }],
+      },
+    },
+  })
+
+  expect(wrapper.get('a').attributes('href')).toBe('https://www.mi.com/example')
+  expect(wrapper.get('a').attributes('rel')).toContain('noopener')
+})

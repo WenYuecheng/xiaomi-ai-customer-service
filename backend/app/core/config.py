@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     def validate_runtime_secrets(self) -> None:
         if self.app_env == "production" and (not self.jwt_secret or len(self.jwt_secret) < 32):
             raise ValueError("JWT_SECRET must contain at least 32 characters in production")
+        uses_openai = self.llm_provider == "openai" or self.embedding_provider == "openai"
+        if uses_openai and not self.openai_api_key:
+            raise ValueError("OPENAI_API_KEY is required for OpenAI-compatible providers")
 
 
 @lru_cache

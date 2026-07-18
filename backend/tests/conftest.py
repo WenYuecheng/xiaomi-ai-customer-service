@@ -17,6 +17,10 @@ def settings(tmp_path: Path) -> Settings:
         chroma_dir=tmp_path / "chroma",
         model_artifact_dir=tmp_path / "models",
         jwt_secret="test-secret-with-at-least-thirty-two-characters",  # noqa: S106
+        llm_provider="mock",
+        llm_model="mock-grounded-chat",
+        embedding_provider="mock",
+        embedding_model="mock-hash-embedding",
     )
 
 
