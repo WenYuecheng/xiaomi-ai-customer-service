@@ -17,5 +17,4 @@ COPY backend/alembic.ini ./alembic.ini
 RUN mkdir -p /data/uploads /data/chroma /data/models && chown -R app:app /app /data
 USER app
 EXPOSE 8000
-CMD ["sh", "-c", "python -m app.commands init-demo && fastapi run app/main.py --host 0.0.0.0 --port 8000"]
-
+CMD ["sh", "-c", "python -m app.commands prepare-migrations && alembic upgrade head && python -m app.commands init-demo && fastapi run app/main.py --host 0.0.0.0 --port 8000"]

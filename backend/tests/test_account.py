@@ -73,8 +73,7 @@ def test_register_rejects_weak_password_mismatch_and_role_escalation(client: Tes
     assert mismatch.status_code == 422
     assert escalation.status_code == 422
     assert all(
-        item.json()["error"]["code"] == "validation_error"
-        for item in (weak, mismatch, escalation)
+        item.json()["error"]["code"] == "validation_error" for item in (weak, mismatch, escalation)
     )
 
 

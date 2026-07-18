@@ -1,11 +1,59 @@
 import argparse
 
-from sqlalchemy import select
+from sqlalchemy import inspect, select, text
 
 from app.auth.service import create_user
 from app.core.config import get_settings
 from app.db.base import Base, create_database
 from app.db.models import MockOrder, User
+
+INITIAL_REVISION = "511076d503e5"
+ADVISOR_REVISION = "8f2c4a1b7d30"
+PROFILE_REVISION = "3c7d9a2e4f10"
+
+
+def prepare_migrations(database_url: str | None = None) -> str | None:
+    """Stamp databases created by the legacy ``create_all`` startup path.
+
+    Fresh and already-versioned databases are left untouched. The compatibility
+    stamp lets Alembic apply only migrations that are newer than the schema the
+    legacy database already contains.
+    """
+    settings = get_settings()
+    engine, _ = create_database(database_url or settings.database_url)
+    try:
+        with engine.begin() as connection:
+            inspector = inspect(connection)
+            tables = set(inspector.get_table_names())
+            if "users" not in tables:
+                return None
+
+            connection.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS alembic_version "
+                    "(version_num VARCHAR(32) NOT NULL PRIMARY KEY)"
+                )
+            )
+            existing = connection.execute(
+                text("SELECT version_num FROM alembic_version LIMIT 1")
+            ).scalar_one_or_none()
+            if existing:
+                return str(existing)
+
+            user_columns = {column["name"] for column in inspector.get_columns("users")}
+            if {"display_name", "avatar_key", "token_version"} <= user_columns:
+                revision = PROFILE_REVISION
+            elif {"advisor_sessions", "advisor_turns"} <= tables:
+                revision = ADVISOR_REVISION
+            else:
+                revision = INITIAL_REVISION
+            connection.execute(
+                text("INSERT INTO alembic_version (version_num) VALUES (:revision)"),
+                {"revision": revision},
+            )
+            return revision
+    finally:
+        engine.dispose()
 
 
 def init_demo() -> None:
@@ -54,10 +102,12 @@ def init_demo() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Course demo maintenance commands")
-    parser.add_argument("command", choices=["init-demo"])
+    parser.add_argument("command", choices=["init-demo", "prepare-migrations"])
     args = parser.parse_args()
     if args.command == "init-demo":
         init_demo()
+    elif args.command == "prepare-migrations":
+        prepare_migrations()
 
 
 if __name__ == "__main__":
