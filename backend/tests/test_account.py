@@ -1,7 +1,21 @@
+from datetime import UTC, datetime, timedelta
+
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app.db.models import BehaviorEvent, User, UserRole
+from app.db.models import (
+    AdvisorSession,
+    AdvisorTurn,
+    BehaviorEvent,
+    Conversation,
+    Feedback,
+    FeedbackRating,
+    KnowledgeBase,
+    Message,
+    MessageRole,
+    User,
+    UserRole,
+)
 from tests.conftest import auth_headers
 
 
@@ -146,3 +160,110 @@ def test_change_password_invalidates_old_tokens_and_never_audits_secrets(
         assert audit is not None
         assert "NewSecure123" not in str(audit.payload)
         assert users["customer"] not in str(audit.payload)
+
+
+def test_account_dashboard_and_cursor_activity_are_grounded_and_user_isolated(
+    client: TestClient,
+    application,
+    users: dict[str, str],
+) -> None:
+    now = datetime.now(UTC)
+    with application.state.session_factory() as session:
+        customer = session.scalar(select(User).where(User.username == "customer"))
+        operator = session.scalar(select(User).where(User.username == "operator"))
+        assert customer is not None and operator is not None
+        knowledge_base = KnowledgeBase(
+            name="个人主页测试库",
+            description="dashboard test",
+            owner_id=operator.id,
+        )
+        session.add(knowledge_base)
+        session.flush()
+        conversation = Conversation(
+            user_id=customer.id,
+            knowledge_base_id=knowledge_base.id,
+            created_at=now - timedelta(days=3),
+        )
+        session.add(conversation)
+        session.flush()
+        question = Message(
+            conversation_id=conversation.id,
+            role=MessageRole.user,
+            content="Xiaomi 14 的续航怎么样？",
+            created_at=now - timedelta(days=3),
+        )
+        answer = Message(
+            conversation_id=conversation.id,
+            role=MessageRole.assistant,
+            content="依据资料，电池容量为 4610mAh。",
+            created_at=now - timedelta(days=3, minutes=-1),
+        )
+        session.add_all([question, answer])
+        session.flush()
+        session.add(
+            Feedback(
+                message_id=answer.id,
+                user_id=customer.id,
+                rating=FeedbackRating.up,
+                created_at=now - timedelta(days=1),
+            )
+        )
+        advisor_session = AdvisorSession(
+            user_id=customer.id,
+            knowledge_base_id=knowledge_base.id,
+            title="手机 AI 选购方案",
+            category="phone",
+        )
+        session.add(advisor_session)
+        session.flush()
+        session.add(
+            AdvisorTurn(
+                session_id=advisor_session.id,
+                sequence_no=1,
+                question="小米 14 和 REDMI K80 怎么选？",
+                requirements={},
+                plan={"recommendation": {"summary": "续航优先可关注 REDMI K80"}},
+                sources=[],
+                ai_trace=[],
+                status="completed",
+                created_at=now - timedelta(days=2),
+            )
+        )
+        session.add(
+            BehaviorEvent(
+                user_id=customer.id,
+                event_type="chat",
+                payload={"question": "Xiaomi 14 续航", "intent": "knowledge_query"},
+                created_at=now - timedelta(days=3),
+            )
+        )
+        session.commit()
+
+    headers = auth_headers(client, "customer", users["customer"])
+    dashboard = client.get("/api/v1/account/dashboard", headers=headers)
+    first_page = client.get("/api/v1/account/activities?limit=2", headers=headers)
+
+    assert dashboard.status_code == 200, dashboard.text
+    body = dashboard.json()
+    assert body["stats"]["consultation_count"] == 1
+    assert body["stats"]["advisor_plan_count"] == 1
+    assert body["stats"]["feedback_count"] == 1
+    assert body["stats"]["helpful_rate"] == 100
+    assert body["growth_level"] == 1
+    assert body["interests"]["product_preferences"] == ["小米 14"]
+    assert len(body["trend"]) == 14
+    assert [item["type"] for item in body["recent_activities"]] == [
+        "feedback",
+        "advisor",
+        "chat",
+    ]
+    assert first_page.status_code == 200
+    assert len(first_page.json()["items"]) == 2
+    assert first_page.json()["next_cursor"]
+    second_page = client.get(
+        "/api/v1/account/activities",
+        headers=headers,
+        params={"limit": 2, "cursor": first_page.json()["next_cursor"]},
+    )
+    assert [item["type"] for item in second_page.json()["items"]] == ["chat"]
+    assert "payload" not in str(body)

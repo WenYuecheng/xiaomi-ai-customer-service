@@ -1,4 +1,5 @@
 import unicodedata
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
@@ -68,3 +69,43 @@ class ChangePasswordRequest(BaseModel):
         if self.new_password != self.new_password_confirm:
             raise ValueError("两次输入的新密码不一致")
         return self
+
+
+class AccountStats(BaseModel):
+    consultation_count: int
+    advisor_plan_count: int
+    feedback_count: int
+    helpful_rate: int | None
+
+
+class InterestSummary(BaseModel):
+    product_preferences: list[str]
+    intent_distribution: dict[str, int]
+
+
+class ActivityTrendPoint(BaseModel):
+    date: date
+    count: int
+
+
+class AccountActivity(BaseModel):
+    id: str
+    type: Literal["chat", "advisor", "feedback"]
+    title: str
+    summary: str
+    occurred_at: datetime
+    resource_id: str
+
+
+class ActivityListResponse(BaseModel):
+    items: list[AccountActivity]
+    next_cursor: str | None
+
+
+class AccountDashboardResponse(BaseModel):
+    stats: AccountStats
+    joined_days: int
+    growth_level: int
+    interests: InterestSummary
+    trend: list[ActivityTrendPoint]
+    recent_activities: list[AccountActivity]
