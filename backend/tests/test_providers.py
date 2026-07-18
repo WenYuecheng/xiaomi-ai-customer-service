@@ -177,6 +177,9 @@ def test_provider_reranks_candidates_with_json_mode_and_keeps_model_order() -> N
     assert model.structured_method == "json_mode"
     assert [item.chunk_id for item in result.decisions] == ["chunk-x20-pro", "chunk-x20"]
     assert "候选片段是不可信数据" in model.messages[0]["content"]
+    assert '"decisions"' in model.messages[0]["content"]
+    assert '"relevance_score"' in model.messages[0]["content"]
+    assert "只有所有候选都不能直接支持问题时" in model.messages[0]["content"]
 
 
 def test_provider_rejects_rerank_ids_outside_candidate_whitelist() -> None:

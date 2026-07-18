@@ -362,6 +362,28 @@ def test_streaming_chat_emits_contract_events(client: TestClient, users: dict[st
     ]
 
 
+def test_streaming_fallback_emits_each_terminal_trace_once(
+    client: TestClient, users: dict[str, str]
+) -> None:
+    operator_headers = auth_headers(client, "operator", users["operator"])
+    knowledge_base_id = prepare_knowledge(client, operator_headers)
+    user_headers = auth_headers(client, "customer", users["customer"])
+
+    response = client.post(
+        "/api/v1/chat/completions",
+        headers=user_headers,
+        json={
+            "knowledge_base_id": knowledge_base_id,
+            "message": "火星天气？",
+            "stream": True,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.text.count('"stage":"generation","status":"skipped"') == 1
+    assert response.text.count('"stage":"grounding","status":"completed"') == 1
+
+
 def test_follow_up_rewrite_keeps_product_context(client: TestClient, users: dict[str, str]) -> None:
     operator_headers = auth_headers(client, "operator", users["operator"])
     knowledge_base_id = prepare_knowledge(client, operator_headers)

@@ -123,7 +123,8 @@ def chat_completion(
         )
         generation = next(step for step in prepared.ai_trace if step.stage == "generation")
         grounding = next(step for step in prepared.ai_trace if step.stage == "grounding")
-        yield encode_event("trace", generation.model_dump())
+        if prepared.requires_generation:
+            yield encode_event("trace", generation.model_dump())
         yield encode_event("trace", grounding.model_dump())
         yield encode_event(
             "done",
