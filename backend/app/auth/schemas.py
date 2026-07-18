@@ -10,6 +10,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.account.schemas import validate_password_strength
 from app.db.models import UserRole
 
 
@@ -59,14 +60,7 @@ class RegisterRequest(BaseModel):
     @field_validator("password")
     @classmethod
     def validate_password(cls, value: str) -> str:
-        byte_length = len(value.encode("utf-8"))
-        if not 8 <= byte_length <= 72:
-            raise ValueError("密码长度必须为 8–72 个 UTF-8 字节")
-        if not any(character.isalpha() for character in value) or not any(
-            character.isdigit() for character in value
-        ):
-            raise ValueError("密码必须同时包含字母和数字")
-        return value
+        return validate_password_strength(value)
 
     @model_validator(mode="after")
     def passwords_match(self) -> "RegisterRequest":

@@ -1,7 +1,8 @@
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app.db.models import User, UserRole
+from app.db.models import BehaviorEvent, User, UserRole
+from tests.conftest import auth_headers
 
 
 def test_register_creates_normalized_user_and_returns_authenticated_session(
@@ -80,3 +81,68 @@ def test_register_rejects_duplicate_username_and_rate_limits_source(client: Test
     assert limited.status_code == 429
     assert limited.json()["error"]["code"] == "registration_rate_limited"
     assert int(limited.headers["Retry-After"]) > 0
+
+
+def test_user_can_update_display_name_and_whitelisted_avatar(
+    client: TestClient,
+    users: dict[str, str],
+) -> None:
+    headers = auth_headers(client, "customer", users["customer"])
+
+    updated = client.patch(
+        "/api/v1/account/profile",
+        headers=headers,
+        json={"display_name": "  小米探索者  ", "avatar_key": "cosmos"},
+    )
+    invalid_avatar = client.patch(
+        "/api/v1/account/profile",
+        headers=headers,
+        json={"avatar_key": "../../avatar.png"},
+    )
+
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["display_name"] == "小米探索者"
+    assert updated.json()["avatar_key"] == "cosmos"
+    assert invalid_avatar.status_code == 422
+
+
+def test_change_password_invalidates_old_tokens_and_never_audits_secrets(
+    client: TestClient,
+    application,
+    users: dict[str, str],
+) -> None:
+    headers = auth_headers(client, "customer", users["customer"])
+    wrong = client.post(
+        "/api/v1/account/change-password",
+        headers=headers,
+        json={
+            "current_password": "Wrong123",
+            "new_password": "NewSecure123",
+            "new_password_confirm": "NewSecure123",
+        },
+    )
+    changed = client.post(
+        "/api/v1/account/change-password",
+        headers=headers,
+        json={
+            "current_password": users["customer"],
+            "new_password": "NewSecure123",
+            "new_password_confirm": "NewSecure123",
+        },
+    )
+
+    assert wrong.status_code == 400
+    assert wrong.json()["error"]["code"] == "invalid_current_password"
+    assert changed.status_code == 204
+    assert client.get("/api/v1/auth/me", headers=headers).status_code == 401
+    new_headers = auth_headers(client, "customer", "NewSecure123")
+    assert client.get("/api/v1/auth/me", headers=new_headers).status_code == 200
+    with application.state.session_factory() as session:
+        audit = session.scalar(
+            select(BehaviorEvent).where(
+                BehaviorEvent.event_type == "audit:account:password_changed"
+            )
+        )
+        assert audit is not None
+        assert "NewSecure123" not in str(audit.payload)
+        assert users["customer"] not in str(audit.payload)

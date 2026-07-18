@@ -45,6 +45,8 @@ def get_current_user(
     user = session.get(User, payload["sub"])
     if not user or not user.is_active:
         raise AppError(401, "invalid_token", "用户不存在或已停用")
+    if int(payload.get("ver", 0)) != user.token_version:
+        raise AppError(401, "invalid_token", "登录凭证已失效，请重新登录")
     return user
 
 
