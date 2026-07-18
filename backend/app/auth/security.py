@@ -60,7 +60,12 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
-def create_access_token(subject: str, role: str, settings: Settings) -> str:
+def create_access_token(
+    subject: str,
+    role: str,
+    settings: Settings,
+    token_version: int = 0,
+) -> str:
     """
     功能归属：
     用户认证 -> 令牌生成。
@@ -85,6 +90,7 @@ def create_access_token(subject: str, role: str, settings: Settings) -> str:
         "iat": now,
         "exp": now + timedelta(minutes=settings.access_token_expire_minutes),
         "iss": settings.app_name,
+        "ver": token_version,
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 

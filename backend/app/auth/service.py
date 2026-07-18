@@ -36,6 +36,7 @@ def create_user(session: Session, username: str, password: str, role: str) -> Us
         raise AppError(409, "user_exists", "用户名已存在")
     user = User(
         username=normalized,
+        display_name=normalized,
         password_hash=hash_password(password),
         role=UserRole(role),
     )

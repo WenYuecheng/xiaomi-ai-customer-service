@@ -5,6 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.advisor.router import router as advisor_router
+from app.auth.rate_limit import RegistrationRateLimiter
 from app.auth.router import router as auth_router
 from app.chat.router import router as chat_router
 from app.core.config import Settings, get_settings
@@ -44,6 +45,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.settings = settings
     application.state.session_factory = session_factory
     application.state.cancelled_runs = set()
+    application.state.registration_rate_limiter = RegistrationRateLimiter(
+        settings.registration_rate_limit,
+        settings.registration_rate_window_seconds,
+    )
     application.add_middleware(RequestIdMiddleware)
     application.add_middleware(
         CORSMiddleware,

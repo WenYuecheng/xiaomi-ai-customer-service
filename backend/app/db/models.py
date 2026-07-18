@@ -60,12 +60,15 @@ class User(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     # 登录使用的唯一标识符
     username: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(40), default="")
+    avatar_key: Mapped[str] = mapped_column(String(20), default="aurora")
     # 经过 bcrypt 加密后的密码散列值，绝不能返回给客户端
     password_hash: Mapped[str] = mapped_column(String(128))
     # 用户角色，决定其操作权限
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.user)
     # 逻辑删除/封禁标识，为 False 时无法登录
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    token_version: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     knowledge_bases: Mapped[list["KnowledgeBase"]] = relationship(back_populates="owner")

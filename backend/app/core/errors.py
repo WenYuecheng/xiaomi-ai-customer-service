@@ -43,11 +43,13 @@ class AppError(Exception):
         code: str,
         message: str,
         details: Any | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         self.status_code = status_code
         self.code = code
         self.message = message
         self.details = details
+        self.headers = headers or {}
         super().__init__(message)
 
 
@@ -77,6 +79,7 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
         content=error_payload(request, exc.code, exc.message, exc.details),
+        headers=exc.headers,
     )
 
 

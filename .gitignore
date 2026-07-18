@@ -1,5 +1,6 @@
 .DS_Store
 .idea/
+.superpowers/
 .env
 .venv/
 .pytest_cache/

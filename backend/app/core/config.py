@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     jwt_secret: str | None = None
     jwt_algorithm: Literal["HS256"] = "HS256"
     access_token_expire_minutes: int = Field(default=60, ge=5, le=1440)
+    registration_rate_limit: int = Field(default=5, ge=1, le=100)
+    registration_rate_window_seconds: int = Field(default=600, ge=60, le=86400)
     max_upload_bytes: int = Field(default=10 * 1024 * 1024, ge=1024, le=100 * 1024 * 1024)
     llm_provider: Literal["mock", "openai", "ollama"] = "mock"
     llm_model: str = "mock-grounded-chat"
