@@ -24,12 +24,13 @@ class SourceResponse(BaseModel):
 
 
 class AiTraceStep(BaseModel):
-    stage: Literal["understanding", "retrieval", "generation", "grounding"]
+    stage: Literal["understanding", "retrieval", "reranking", "generation", "grounding"]
     status: Literal["running", "completed", "skipped", "degraded", "failed"]
     engine: str
     model: str
     duration_ms: int | None = None
     summary: str
+    details: list[str] = Field(default_factory=list, max_length=3)
 
 
 class ChatResponse(BaseModel):

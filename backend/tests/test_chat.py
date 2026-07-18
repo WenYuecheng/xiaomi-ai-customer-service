@@ -2,7 +2,7 @@ from io import BytesIO
 
 from fastapi.testclient import TestClient
 
-from app.rag.providers import QuestionAnalysis
+from app.rag.providers import QuestionAnalysis, RerankDecision, RerankResult
 from tests.conftest import auth_headers
 from tests.test_documents import create_knowledge_base, wait_for_job
 
@@ -48,11 +48,14 @@ def test_grounded_chat_returns_actual_source_and_history(
     assert [step["stage"] for step in body["ai_trace"]] == [
         "understanding",
         "retrieval",
+        "reranking",
         "generation",
         "grounding",
     ]
     assert body["ai_trace"][0]["status"] == "completed"
     assert body["ai_trace"][2]["status"] == "completed"
+    assert body["ai_trace"][2]["details"]
+    assert body["ai_trace"][3]["status"] == "completed"
     history = client.get(
         f"/api/v1/conversations/{body['conversation_id']}", headers=user_headers
     ).json()
@@ -113,11 +116,12 @@ def test_unrelated_question_falls_back_without_sources(
     assert "没有可靠依据" in generation["summary"]
 
 
-def test_model_is_called_twice_only_when_reliable_sources_exist(
+def test_model_is_called_three_times_only_when_reliable_sources_exist(
     client: TestClient, users: dict[str, str], monkeypatch
 ) -> None:
     class CountingProvider:
         analysis_calls = 0
+        rerank_calls = 0
         generation_calls = 0
 
         def analyze(self, question, summary=None, recent_messages=None):
@@ -129,6 +133,20 @@ def test_model_is_called_twice_only_when_reliable_sources_exist(
                 product_models=["小米 14"] if "小米" in question else [],
                 need_retrieval=True,
                 confidence=0.99,
+            )
+
+        def rerank(self, question, candidates, top_k):
+            del question
+            self.rerank_calls += 1
+            return RerankResult(
+                decisions=[
+                    RerankDecision(
+                        chunk_id=item.chunk_id,
+                        relevance_score=1,
+                        reason="直接包含答案",
+                    )
+                    for item in candidates[:top_k]
+                ]
             )
 
         def generate(self, question, contexts, summary=None, recent_messages=None):
@@ -159,7 +177,118 @@ def test_model_is_called_twice_only_when_reliable_sources_exist(
     assert grounded.status_code == 200
     assert fallback.status_code == 200
     assert provider.analysis_calls == 2
+    assert provider.rerank_calls == 1
     assert provider.generation_calls == 1
+
+
+def test_reranker_can_reject_all_candidates_without_calling_generation(
+    client: TestClient, users: dict[str, str], monkeypatch
+) -> None:
+    class RejectingProvider:
+        analysis_calls = 0
+        rerank_calls = 0
+        generation_calls = 0
+
+        def analyze(self, question, summary=None, recent_messages=None):
+            del summary, recent_messages
+            self.analysis_calls += 1
+            return QuestionAnalysis(
+                intent="knowledge_query",
+                rewritten_question=question,
+                product_models=["小米 14"],
+                need_retrieval=True,
+                confidence=1,
+            )
+
+        def rerank(self, question, candidates, top_k):
+            del question, candidates, top_k
+            self.rerank_calls += 1
+            return RerankResult(decisions=[])
+
+        def generate(self, question, contexts, summary=None, recent_messages=None):
+            del question, contexts, summary, recent_messages
+            self.generation_calls += 1
+            return "不应调用"
+
+        def stream(self, question, contexts, summary=None, recent_messages=None):
+            yield self.generate(question, contexts, summary, recent_messages)
+
+    provider = RejectingProvider()
+    monkeypatch.setattr("app.chat.service.create_chat_provider", lambda _settings: provider)
+    operator_headers = auth_headers(client, "operator", users["operator"])
+    knowledge_base_id = prepare_knowledge(client, operator_headers)
+    user_headers = auth_headers(client, "customer", users["customer"])
+
+    response = client.post(
+        "/api/v1/chat/completions",
+        headers=user_headers,
+        json={"knowledge_base_id": knowledge_base_id, "message": "小米 14 充电功率？"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["fallback"] is True
+    assert response.json()["sources"] == []
+    assert provider.analysis_calls == 1
+    assert provider.rerank_calls == 1
+    assert provider.generation_calls == 0
+    reranking = next(step for step in response.json()["ai_trace"] if step["stage"] == "reranking")
+    assert reranking["status"] == "completed"
+    assert "未保留" in reranking["summary"]
+
+
+def test_reranker_failure_degrades_to_vector_order_and_still_generates(
+    client: TestClient, users: dict[str, str], monkeypatch
+) -> None:
+    class FailingRerankProvider:
+        analysis_calls = 0
+        rerank_calls = 0
+        generation_calls = 0
+
+        def analyze(self, question, summary=None, recent_messages=None):
+            del summary, recent_messages
+            self.analysis_calls += 1
+            return QuestionAnalysis(
+                intent="knowledge_query",
+                rewritten_question=question,
+                product_models=["小米 14"],
+                need_retrieval=True,
+                confidence=1,
+            )
+
+        def rerank(self, question, candidates, top_k):
+            del question, candidates, top_k
+            self.rerank_calls += 1
+            raise ValueError("invalid structured rerank result")
+
+        def generate(self, question, contexts, summary=None, recent_messages=None):
+            del question, summary, recent_messages
+            self.generation_calls += 1
+            return f"降级后仍依据知识回答：{contexts[0]}"
+
+        def stream(self, question, contexts, summary=None, recent_messages=None):
+            yield self.generate(question, contexts, summary, recent_messages)
+
+    provider = FailingRerankProvider()
+    monkeypatch.setattr("app.chat.service.create_chat_provider", lambda _settings: provider)
+    operator_headers = auth_headers(client, "operator", users["operator"])
+    knowledge_base_id = prepare_knowledge(client, operator_headers)
+    user_headers = auth_headers(client, "customer", users["customer"])
+
+    response = client.post(
+        "/api/v1/chat/completions",
+        headers=user_headers,
+        json={"knowledge_base_id": knowledge_base_id, "message": "小米 14 充电功率？"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["fallback"] is False
+    assert response.json()["sources"]
+    assert provider.analysis_calls == 1
+    assert provider.rerank_calls == 1
+    assert provider.generation_calls == 1
+    reranking = next(step for step in response.json()["ai_trace"] if step["stage"] == "reranking")
+    assert reranking["status"] == "degraded"
+    assert "原始排序" in reranking["summary"]
 
 
 def test_feedback_is_idempotently_updated(client: TestClient, users: dict[str, str]) -> None:
@@ -210,7 +339,27 @@ def test_streaming_chat_emits_contract_events(client: TestClient, users: dict[st
     assert text.index("event: meta") < text.index("event: trace") < text.index("event: delta")
     assert text.index("event: delta") < text.index("event: sources") < text.index("event: done")
     assert '"stage":"understanding"' in text
+    assert '"stage":"reranking"' in text
     assert '"stage":"grounding"' in text
+    events = []
+    for block in text.split("\n\n"):
+        event = next((line[7:] for line in block.splitlines() if line.startswith("event: ")), None)
+        data = next((line[6:] for line in block.splitlines() if line.startswith("data: ")), None)
+        if event and data:
+            import json
+
+            payload = json.loads(data)
+            events.append((event, payload.get("stage"), payload.get("status")))
+    assert events[:8] == [
+        ("meta", None, None),
+        ("trace", "understanding", "running"),
+        ("trace", "understanding", "completed"),
+        ("trace", "retrieval", "running"),
+        ("trace", "retrieval", "completed"),
+        ("trace", "reranking", "running"),
+        ("trace", "reranking", "completed"),
+        ("trace", "generation", "running"),
+    ]
 
 
 def test_follow_up_rewrite_keeps_product_context(client: TestClient, users: dict[str, str]) -> None:
@@ -239,8 +388,39 @@ def test_follow_up_rewrite_keeps_product_context(client: TestClient, users: dict
 
 
 def test_explicit_human_transfer_is_suggested_immediately(
-    client: TestClient, users: dict[str, str]
+    client: TestClient, users: dict[str, str], monkeypatch
 ) -> None:
+    class TransferProvider:
+        analysis_calls = 0
+        rerank_calls = 0
+        generation_calls = 0
+
+        def analyze(self, question, summary=None, recent_messages=None):
+            del summary, recent_messages
+            self.analysis_calls += 1
+            return QuestionAnalysis(
+                intent="human_transfer",
+                rewritten_question=question,
+                product_models=[],
+                need_retrieval=False,
+                confidence=1,
+            )
+
+        def rerank(self, question, candidates, top_k):
+            del question, candidates, top_k
+            self.rerank_calls += 1
+            return RerankResult(decisions=[])
+
+        def generate(self, question, contexts, summary=None, recent_messages=None):
+            del question, contexts, summary, recent_messages
+            self.generation_calls += 1
+            return "不应调用"
+
+        def stream(self, question, contexts, summary=None, recent_messages=None):
+            yield self.generate(question, contexts, summary, recent_messages)
+
+    provider = TransferProvider()
+    monkeypatch.setattr("app.chat.service.create_chat_provider", lambda _settings: provider)
     operator_headers = auth_headers(client, "operator", users["operator"])
     knowledge_base_id = prepare_knowledge(client, operator_headers)
     user_headers = auth_headers(client, "customer", users["customer"])
@@ -254,6 +434,9 @@ def test_explicit_human_transfer_is_suggested_immediately(
     assert response.status_code == 200
     assert response.json()["transfer_suggested"] is True
     assert response.json()["fallback"] is False
+    assert provider.analysis_calls == 1
+    assert provider.rerank_calls == 0
+    assert provider.generation_calls == 0
 
 
 def test_sensitive_credentials_are_blocked_and_audited(

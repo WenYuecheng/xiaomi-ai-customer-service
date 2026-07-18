@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     openai_base_url: str | None = None
     ollama_base_url: str = "http://localhost:11434"
     top_k: int = Field(default=4, ge=1, le=20)
+    rerank_candidate_k: int = Field(default=8, ge=1, le=20)
+    rerank_min_score: float = Field(default=0.65, ge=0, le=1)
     similarity_threshold: float = Field(default=0.25, ge=0, le=1)
     chunk_size: int = Field(default=800, ge=200, le=4000)
     chunk_overlap: int = Field(default=120, ge=0, le=800)

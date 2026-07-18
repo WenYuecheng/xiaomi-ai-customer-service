@@ -15,7 +15,12 @@ from app.chat.schemas import (
     MessageResponse,
     SourceResponse,
 )
-from app.chat.service import complete_chat, prepare_chat, stream_prepared_chat
+from app.chat.service import (
+    complete_chat,
+    initialize_stream_chat,
+    stream_preparation_steps,
+    stream_prepared_chat,
+)
 from app.core.errors import AppError
 from app.db.base import SessionDep
 from app.db.models import (
@@ -53,21 +58,13 @@ def chat_completion(
     current_user: CurrentUserDep,
 ) -> ChatResponse | StreamingResponse:
     if payload.stream:
-        prepared = prepare_chat(
+        prepared = initialize_stream_chat(
             session,
             request.app.state.settings,
-            request.app.state.worker.vector_store,
             current_user,
             payload.knowledge_base_id,
             payload.message,
             payload.conversation_id,
-        )
-        conversation, message, sources, run_id, ai_trace = (
-            prepared.conversation,
-            prepared.message,
-            prepared.sources,
-            prepared.run_id,
-            prepared.ai_trace,
         )
     else:
         conversation, message, sources, run_id, ai_trace = complete_chat(
@@ -79,9 +76,8 @@ def chat_completion(
             payload.message,
             payload.conversation_id,
         )
-    response = build_chat_response(conversation, message, sources, run_id, ai_trace)
     if not payload.stream:
-        return response
+        return build_chat_response(conversation, message, sources, run_id, ai_trace)
 
     def encode_event(event: str, data: dict) -> bytes:
         payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
@@ -91,20 +87,24 @@ def chat_completion(
         yield encode_event(
             "meta",
             {
-                "conversation_id": response.conversation_id,
-                "message_id": response.message_id,
-                "run_id": response.run_id,
+                "conversation_id": prepared.conversation.id,
+                "message_id": prepared.message.id,
+                "run_id": prepared.run_id,
             },
         )
-        for step in prepared.ai_trace:
-            if step.stage != "grounding":
-                yield encode_event("trace", step.model_dump())
+        for step in stream_preparation_steps(
+            session,
+            request.app.state.settings,
+            request.app.state.worker.vector_store,
+            prepared,
+        ):
+            yield encode_event("trace", step.model_dump())
         try:
             for token in stream_prepared_chat(
                 session,
                 request.app.state.settings,
                 prepared,
-                lambda: run_id in request.app.state.cancelled_runs,
+                lambda: prepared.run_id in request.app.state.cancelled_runs,
             ):
                 yield encode_event("delta", {"content": token})
         except Exception:
@@ -113,7 +113,13 @@ def chat_completion(
             yield encode_event("error", {"code": "generation_failed", "message": "回答生成失败"})
             return
         yield encode_event(
-            "sources", {"sources": [source.model_dump() for source in response.sources]}
+            "sources",
+            {
+                "sources": [
+                    SourceResponse.model_validate(source).model_dump()
+                    for source in prepared.sources
+                ]
+            },
         )
         generation = next(step for step in prepared.ai_trace if step.stage == "generation")
         grounding = next(step for step in prepared.ai_trace if step.stage == "grounding")
@@ -122,12 +128,15 @@ def chat_completion(
         yield encode_event(
             "done",
             {
-                "fallback": response.fallback,
-                "transfer_suggested": response.transfer_suggested,
-                "cancelled": run_id in request.app.state.cancelled_runs,
+                "fallback": prepared.message.fallback,
+                "transfer_suggested": (
+                    prepared.conversation.consecutive_fallbacks >= 2
+                    or prepared.message.intent == "human_transfer"
+                ),
+                "cancelled": prepared.run_id in request.app.state.cancelled_runs,
             },
         )
-        request.app.state.cancelled_runs.discard(run_id)
+        request.app.state.cancelled_runs.discard(prepared.run_id)
 
     return StreamingResponse(events(), media_type="text/event-stream")
 
