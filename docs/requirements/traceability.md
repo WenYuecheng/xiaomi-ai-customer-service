@@ -20,13 +20,13 @@
 | EP01-05 切分预览 | `/documents/{id}/chunks` | chunk 参数/预览测试 |
 | EP01-06 生成重建向量 | `/documents/{id}/reindex`、job retry | worker 与文档测试 |
 | EP01-07 删除文档向量 | `DELETE /documents/{id}` | 删除残留测试 |
-| EP02-01 单轮问答 | `/chat/completions` | 30/30 RAG 回归 |
+| EP02-01 单轮问答 | `/chat/completions`、DeepSeek 问题理解/重排/生成 | 30/30 RAG 回归、三调用计数测试 |
 | EP02-02 多轮上下文 | 会话、滚动摘要、最近 10 轮、问题改写 | 追问、提示词历史与隔离测试 |
 | EP02-03 来源引用 | `MessageSource`、公开 URL、可点击来源卡片 | grounded source 与安全 URL 测试 |
 | EP02-04 低置信兜底 | 阈值与 `FALLBACK_ANSWER` | 无关问题、连续兜底测试 |
-| EP02-05 检索参数 | 环境配置 `TOP_K`/阈值 | Pydantic 范围校验 |
-| EP02-06 JSON/SSE | JSON 与五类 SSE 事件、原生模型 token 流 | SSE 顺序与 provider 流测试 |
-| EP03-01 聊天主页 | `ChatView.vue` | 前端构建 |
+| EP02-05 检索参数 | `TOP_K`、`RERANK_CANDIDATE_K`、向量/重排阈值 | Pydantic 范围、白名单、去重与降级测试 |
+| EP02-06 JSON/SSE | JSON、SSE、五阶段 `ai_trace`、原生模型 token 流 | 严格 SSE 顺序、终态单次发送与历史恢复测试 |
+| EP03-01 聊天主页 | `ChatView.vue`、默认展开的五阶段 AI 轨迹 | 轨迹组件测试、前端构建 |
 | EP03-02 流式与停止 | `api/chat.ts`、服务端 run 取消、AbortController | SSE/原生流测试、前端构建 |
 | EP03-03 安全 Markdown | markdown-it + DOMPurify | XSS 组件测试 |
 | EP03-04 引用来源 | `SourceRail.vue` | 组件测试 |
@@ -41,8 +41,8 @@
 | EP05-04 密钥配置 | Settings/`.env.example` | 敏感信息扫描 |
 | EP05-05 敏感输入 | 长度、文件、敏感词与审计 | blocked input 测试 |
 | EP06-01 标准回归集 | `questions.csv`、评测脚本 | 30/30，100% |
-| EP06-02 核心测试 | pytest/Vitest | 后端 29、前端 3 |
-| EP06-03 Compose MVP | 两个 Dockerfile、Compose | 配置通过；Docker Desktop 存储 I/O 故障待恢复后实测 |
+| EP06-02 核心测试 | pytest/Vitest | 后端 41、前端 15，覆盖率 88% |
+| EP06-03 Compose MVP | 两个 Dockerfile、Compose | 前后端镜像构建通过，后端 healthy、前端 running |
 | EP06-04 README/API | README、Swagger、数据库文档 | 本地端到端启动验证 |
 | EP06-05 Jira 归档 | `jira/README.md`、本矩阵 | 单人真实证据流程 |
 

@@ -1,6 +1,16 @@
 # 测试报告
 
-执行日期：2026-07-17。
+执行日期：2026-07-18。
+
+## 第二阶段 AI 重排验收
+
+- 后端：41 项 pytest 全部通过，覆盖率 88%；Ruff 格式与静态检查通过。
+- 前端：15 项 Vitest 全部通过，`vue-tsc` 与 Vite 生产构建通过。
+- AI 流程：正常知识问题固定执行 `DeepSeek 问题理解 → BGE 候选召回 → DeepSeek AI 重排 → DeepSeek 可信回答 → 引用校验`；重排异常、空选择、业务意图、敏感输入和 SSE 终态均有自动测试。
+- 真实模型：Docker 中使用 `deepseek-chat` 和 `BAAI/bge-small-zh-v1.5` 验证“X20 Pro 最大吸力是多少？”。BGE 召回 1 个片段，AI 重排保留 1 个并说明“直接给出最大吸力 7000Pa”，最终回答“X20 Pro 最大吸力为 7000Pa”，来源为 `robot-vacuum-x20-pro.md`。
+- SSE：真实请求按阶段发送 `understanding → retrieval → reranking → generation → grounding`，并在 `delta` 后返回实际来源；低置信度场景的每个终态事件只发送一次。
+
+## 第一阶段与基础平台验收记录
 
 - 后端：30 项 pytest 全部通过，覆盖率 88%；Ruff 格式与静态检查通过。
 - 前端：4 项 Vitest 全部通过，`vue-tsc` 与 Vite 生产构建通过。

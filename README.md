@@ -76,6 +76,18 @@ OLLAMA_BASE_URL=http://host.docker.internal:11434
 
 自动测试始终使用确定性 Mock，避免消耗 API 额度。真实模型只运行少量手工集成测试。
 
+知识问答会在回答卡片中默认展开可验证的五阶段 AI 执行轨迹：
+
+```text
+DeepSeek 1/3 问题理解
+→ BGE 召回 8 个候选片段
+→ DeepSeek 2/3 AI 重排并保留最多 4 个
+→ DeepSeek 3/3 依据来源生成回答
+→ 引用真实性校验
+```
+
+重排只允许选择本次候选中的 chunk ID；异常时降级为 BGE 原排序。没有可靠候选时跳过生成，不让模型补充无来源事实。`RERANK_CANDIDATE_K` 和 `RERANK_MIN_SCORE` 可通过环境变量调整。
+
 ## 测试与质量检查
 
 ```bash
