@@ -3,9 +3,14 @@ export type Role = 'admin' | 'operator' | 'user'
 export interface User {
   id: string
   username: string
+  display_name: string
+  avatar_key: AvatarKey
   role: Role
   is_active: boolean
+  created_at: string
 }
+
+export type AvatarKey = 'aurora' | 'coral' | 'nebula' | 'ocean' | 'sunset' | 'mint' | 'cosmos' | 'ember'
 
 export interface KnowledgeBase {
   id: string

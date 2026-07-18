@@ -20,6 +20,17 @@ export const useAuthStore = defineStore('auth', () => {
     await loadUser()
   }
 
+  async function register(username: string, password: string, passwordConfirm: string): Promise<void> {
+    const response = await api.post<{ access_token: string; user: User }>('/auth/register', {
+      username,
+      password,
+      password_confirm: passwordConfirm,
+    })
+    token.value = response.data.access_token
+    user.value = response.data.user
+    localStorage.setItem(TOKEN_KEY, token.value)
+  }
+
   async function loadUser(): Promise<void> {
     if (!token.value) return
     try {
@@ -35,8 +46,7 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem(TOKEN_KEY)
   }
 
-  return { token, user, isAuthenticated, canOperate, login, loadUser, logout }
+  return { token, user, isAuthenticated, canOperate, login, register, loadUser, logout }
 })
 
 if (import.meta.hot) import.meta.hot.accept(acceptHMRUpdate(useAuthStore, import.meta.hot))
-
