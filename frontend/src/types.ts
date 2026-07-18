@@ -61,12 +61,13 @@ export interface Source {
 }
 
 export interface AiTraceStep {
-  stage: 'understanding' | 'retrieval' | 'generation' | 'grounding'
+  stage: 'understanding' | 'retrieval' | 'reranking' | 'generation' | 'grounding'
   status: 'running' | 'completed' | 'skipped' | 'degraded' | 'failed'
   engine: string
   model: string
   duration_ms?: number | null
   summary: string
+  details?: string[]
 }
 
 export interface ChatMessage {
