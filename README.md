@@ -1,6 +1,6 @@
 # 小米智能客服机器人
 
-面向课程验收的可信 RAG 客服平台。系统支持知识库与多格式文档、真实来源引用、低置信度兜底、多轮会话、SSE 流式回答、Mock 订单/工单、日志反馈、热词、用户画像、混合推荐和离线推荐训练。
+面向课程验收的可信 RAG 客服平台。系统支持知识库与多格式文档、真实来源引用、低置信度兜底、多轮会话、SSE 流式回答、AI 选购实验室、Mock 订单/工单、日志反馈、热词、用户画像、混合推荐和离线推荐训练。
 
 ## 快速启动
 
@@ -88,6 +88,20 @@ DeepSeek 1/3 问题理解
 
 重排只允许选择本次候选中的 chunk ID；异常时降级为 BGE 原排序。没有可靠候选时跳过生成，不让模型补充无来源事实。`RERANK_CANDIDATE_K` 和 `RERANK_MIN_SCORE` 可通过环境变量调整。
 
+## AI 选购实验室
+
+登录后访问 `/advisor`，可选择品类、候选型号、预算和关注维度，生成可保存并继续追问的结构化选购方案。页面会实时展示老师可直接观察的 AI 流程：
+
+```text
+DeepSeek 1/3 解析预算、型号与偏好
+→ BGE 为组合问题及每个指定型号分别召回证据
+→ DeepSeek 2/3 筛选可靠来源
+→ DeepSeek 3/3 生成产品卡、雷达图、对比表与推荐理由
+→ Citation Guard 校验数字、价格和来源 ID
+```
+
+接口为 `/api/v1/advisor/sessions`，同时支持 JSON 与 SSE；会话历史按用户隔离。价格只在知识片段明确提供时展示，并标注资料采集时间，否则统一显示“价格待官网确认”。匹配分和维度分表示当前需求下的 AI 相对匹配度，不是官方性能跑分或实时市场结论。
+
 ## 测试与质量检查
 
 ```bash
@@ -117,8 +131,8 @@ backend/.venv/bin/python scripts/run_rag_evaluation.py \
 ## 项目结构
 
 ```text
-backend/   FastAPI、SQLite、Chroma、后台处理、RAG 与运营推荐
-frontend/  Vue 3、Element Plus、Pinia 与流式聊天工作台
+backend/   FastAPI、SQLite、Chroma、后台处理、RAG、AI 选购与运营推荐
+frontend/  Vue 3、Element Plus、Pinia、ECharts 与流式 AI 工作台
 data/      官方样本、评测集以及运行时持久化目录
 docs/      需求追踪、API、数据库、测试和答辩材料
 scripts/   评测及辅助脚本

@@ -9,6 +9,7 @@ from app.rag.providers import (
     AdvisorRecommendationDraft,
     LangChainChatProvider,
 )
+from app.rag.retrieval import RetrievedSource
 from tests.conftest import auth_headers
 from tests.test_documents import create_knowledge_base, wait_for_job
 
@@ -52,6 +53,8 @@ def test_advisor_plan_rejects_sources_outside_candidate_whitelist() -> None:
         follow_up_suggestions=["更重视续航时怎么选？"],
     )
 
+    messages_seen: list[dict[str, str]] = []
+
     class StructuredModel:
         def with_structured_output(self, schema, *, method: str):
             assert schema is AdvisorPlanDraft
@@ -59,6 +62,7 @@ def test_advisor_plan_rejects_sources_outside_candidate_whitelist() -> None:
 
             class Invoker:
                 def invoke(self, messages):
+                    messages_seen.extend(messages)
                     return plan
 
             return Invoker()
@@ -68,6 +72,8 @@ def test_advisor_plan_rejects_sources_outside_candidate_whitelist() -> None:
             "推荐手机",
             [{"chunk_id": "real", "snippet": "小米 14 电池容量 4610mAh"}],
         )
+    assert '"source_chunk_ids"' in messages_seen[0]["content"]
+    assert '"dimension_scores"' in messages_seen[0]["content"]
 
 
 def test_advisor_session_is_saved_followed_up_and_user_isolated(
@@ -183,3 +189,62 @@ def test_sensitive_advisor_input_is_blocked_before_any_model_call(
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "sensitive_input"
     assert calls == 0
+
+
+def test_advisor_retrieval_guarantees_a_query_for_each_requested_model(monkeypatch) -> None:
+    from app.advisor.service import retrieve_advisor_sources
+
+    calls: list[str] = []
+
+    def fake_retrieve(_db, _vector_store, _knowledge_base_id, query, **_kwargs):
+        calls.append(query)
+        if query == "小米 14":
+            return [RetrievedSource("d1", "c1", "xiaomi14.md", "全文", "小米 14 资料", 0.8)]
+        if query == "REDMI K80":
+            return [RetrievedSource("d2", "c2", "k80.md", "全文", "REDMI K80 资料", 0.9)]
+        return [RetrievedSource("d1", "c1", "xiaomi14.md", "全文", "小米 14 资料", 0.7)]
+
+    monkeypatch.setattr("app.advisor.service.retrieve_sources", fake_retrieve)
+    sources = retrieve_advisor_sources(
+        object(),
+        object(),
+        "kb-1",
+        "小米 14 和 REDMI K80 怎么选",
+        ["小米 14", "REDMI K80"],
+        threshold=0.25,
+        require_lexical_overlap=False,
+    )
+
+    assert calls == ["小米 14 和 REDMI K80 怎么选", "小米 14", "REDMI K80"]
+    assert [source.chunk_id for source in sources] == ["c2", "c1"]
+
+
+def test_advisor_grounding_removes_unsupported_numbers_from_recommendation() -> None:
+    from app.advisor.service import ground_plan
+
+    plan = {
+        "candidates": [
+            {
+                "model": "REDMI K80",
+                "highlights": ["电池容量 6550mAh"],
+                "tradeoffs": [],
+                "source_chunk_ids": ["k80"],
+            }
+        ],
+        "comparison_rows": [],
+        "recommendation": {
+            "primary_model": "REDMI K80",
+            "summary": "电池容量为 6550mAh，续航配置更突出",
+            "reasons": ["相比另一候选，电池容量高出 42%"],
+            "caveats": ["实际续航需结合使用场景"],
+        },
+        "follow_up_suggestions": ["是否还需要对比 120W 充电？"],
+    }
+    sources = [{"chunk_id": "k80", "snippet": "REDMI K80 配备 6550mAh 电池"}]
+
+    grounded = ground_plan(plan, sources)
+
+    assert grounded["recommendation"]["summary"] == "电池容量为 6550mAh，续航配置更突出"
+    assert grounded["recommendation"]["reasons"] == ["资料未明确"]
+    assert grounded["recommendation"]["caveats"] == ["实际续航需结合使用场景"]
+    assert grounded["follow_up_suggestions"] == ["资料未明确"]

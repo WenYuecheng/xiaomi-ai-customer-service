@@ -210,6 +210,17 @@ def ground_plan(plan: dict, sources: list[dict]) -> dict:
         row["values"] = {
             model: _ground_text(value, all_evidence) for model, value in row["values"].items()
         }
+    recommendation = plan["recommendation"]
+    recommendation["summary"] = _ground_text(recommendation["summary"], all_evidence)
+    recommendation["reasons"] = [
+        _ground_text(reason, all_evidence) for reason in recommendation["reasons"]
+    ]
+    recommendation["caveats"] = [
+        _ground_text(caveat, all_evidence) for caveat in recommendation["caveats"]
+    ]
+    plan["follow_up_suggestions"] = [
+        _ground_text(suggestion, all_evidence) for suggestion in plan["follow_up_suggestions"]
+    ]
     return plan
 
 
@@ -297,6 +308,39 @@ def _merge_requirements(
     )
     values.setdefault("mode", "purchase_advice")
     return AdvisorRequirements.model_validate(values)
+
+
+def retrieve_advisor_sources(
+    db: Session,
+    vector_store: VectorStoreService,
+    knowledge_base_id: str,
+    query: str,
+    product_models: list[str],
+    threshold: float,
+    require_lexical_overlap: bool,
+) -> list[RetrievedSource]:
+    queries = [query]
+    queries.extend(
+        model
+        for model in product_models
+        if model and model.casefold() not in {item.casefold() for item in queries}
+    )
+    source_by_id: dict[str, RetrievedSource] = {}
+    for current_query in queries:
+        results = retrieve_sources(
+            db,
+            vector_store,
+            knowledge_base_id,
+            current_query,
+            top_k=12 if current_query == query else 6,
+            threshold=threshold,
+            require_lexical_overlap=require_lexical_overlap,
+        )
+        for source in results:
+            existing = source_by_id.get(source.chunk_id)
+            if not existing or source.score > existing.score:
+                source_by_id[source.chunk_id] = source
+    return sorted(source_by_id.values(), key=lambda item: item.score, reverse=True)[:12]
 
 
 def advisor_events(
@@ -394,12 +438,16 @@ def advisor_events(
     _persist_trace(db, turn, trace)
     yield "trace", retrieval_running.model_dump()
     started = perf_counter()
-    candidates = retrieve_sources(
+    requested_models = list(overrides.get("product_models") or [])
+    if analysis:
+        requested_models.extend(analysis.product_models)
+    requested_models = list(dict.fromkeys(requested_models))[:4]
+    candidates = retrieve_advisor_sources(
         db,
         vector_store,
         advisor_session.knowledge_base_id,
         query,
-        top_k=12,
+        requested_models,
         threshold=settings.similarity_threshold,
         require_lexical_overlap=settings.embedding_provider == "mock",
     )
