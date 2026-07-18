@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
-import { ChatDotRound, DataAnalysis, Postcard, ShoppingCart } from '@element-plus/icons-vue'
+import { ChatDotRound, DataAnalysis, Postcard, ShoppingCart, UserFilled } from '@element-plus/icons-vue'
 
 import { useAuthStore } from '@/stores/auth'
 
@@ -23,12 +23,16 @@ function logout(): void {
         <RouterLink v-if="auth.canOperate" to="/knowledge">知识库</RouterLink>
         <RouterLink v-if="auth.canOperate" to="/operations">运营洞察</RouterLink>
       </nav>
-      <button class="account" type="button" @click="logout">{{ auth.user?.username }} · 退出</button>
+      <details class="account-menu">
+        <summary><i :data-avatar="auth.user?.avatar_key">{{ auth.user?.display_name?.slice(0, 1).toUpperCase() }}</i><span>{{ auth.user?.display_name }}</span></summary>
+        <div><RouterLink to="/profile">✦ 个人主页</RouterLink><RouterLink to="/profile">⚙ 账户设置</RouterLink><button type="button" @click="logout">退出登录</button></div>
+      </details>
     </header>
     <main class="shell__content"><slot /></main>
     <nav class="mobile-nav" aria-label="移动端主导航">
       <RouterLink to="/chat"><el-icon><ChatDotRound /></el-icon><span>问答</span></RouterLink>
       <RouterLink to="/advisor"><el-icon><ShoppingCart /></el-icon><span>选购</span></RouterLink>
+      <RouterLink to="/profile"><el-icon><UserFilled /></el-icon><span>我的</span></RouterLink>
       <RouterLink v-if="auth.canOperate" to="/knowledge"><el-icon><Postcard /></el-icon><span>知识库</span></RouterLink>
       <RouterLink v-if="auth.canOperate" to="/operations"><el-icon><DataAnalysis /></el-icon><span>洞察</span></RouterLink>
     </nav>
@@ -46,7 +50,7 @@ function logout(): void {
 .nav a:hover { background: #eee9fb; color: #5d47b4; }
 .nav a.router-link-active { background: transparent; color: #6045c7; font-weight: 650; }
 .nav a.router-link-active::after { content: ''; position: absolute; bottom: 0; left: 10%; width: 80%; height: 3px; background: linear-gradient(90deg, var(--mi-orange), var(--hyper-violet)); border-radius: 3px; }
-.account { background: none; border: 0; color: var(--ink-muted); cursor: pointer; justify-self: end; }
+.account-menu{justify-self:end;position:relative}.account-menu summary{align-items:center;color:var(--ink-muted);cursor:pointer;display:flex;font-size:12px;gap:8px;list-style:none}.account-menu summary::-webkit-details-marker{display:none}.account-menu summary i{background:linear-gradient(135deg,#ff6900,#ca5cda);border-radius:10px;color:white;display:grid;font-style:normal;height:33px;place-items:center;width:33px}.account-menu summary i[data-avatar='ocean']{background:linear-gradient(135deg,#128ddd,#51d0c4)}.account-menu summary i[data-avatar='mint']{background:linear-gradient(135deg,#0ca98a,#a4df86)}.account-menu summary i[data-avatar='cosmos']{background:linear-gradient(135deg,#6547d8,#d45ac7)}.account-menu>div{background:rgba(255,255,255,.97);border:1px solid #e3dcef;border-radius:15px;box-shadow:0 18px 48px rgba(43,29,76,.18);display:grid;min-width:155px;padding:7px;position:absolute;right:0;top:43px}.account-menu a,.account-menu button{background:transparent;border:0;border-radius:9px;color:#665b72;cursor:pointer;font-size:12px;padding:9px 10px;text-align:left;text-decoration:none}.account-menu a:hover,.account-menu button:hover{background:#f1ecfa;color:#6144c0}
 .shell__content { margin: 0 auto; max-width: 1180px; padding: 36px 28px 60px; }
 .mobile-nav { display: none; }
 @media (max-width: 760px) {

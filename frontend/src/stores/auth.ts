@@ -46,7 +46,11 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem(TOKEN_KEY)
   }
 
-  return { token, user, isAuthenticated, canOperate, login, register, loadUser, logout }
+  function replaceUser(nextUser: User): void {
+    user.value = nextUser
+  }
+
+  return { token, user, isAuthenticated, canOperate, login, register, loadUser, replaceUser, logout }
 })
 
 if (import.meta.hot) import.meta.hot.accept(acceptHMRUpdate(useAuthStore, import.meta.hot))

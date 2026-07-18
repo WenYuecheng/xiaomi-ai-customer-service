@@ -12,6 +12,36 @@ export interface User {
 
 export type AvatarKey = 'aurora' | 'coral' | 'nebula' | 'ocean' | 'sunset' | 'mint' | 'cosmos' | 'ember'
 
+export interface AccountStats {
+  consultation_count: number
+  advisor_plan_count: number
+  feedback_count: number
+  helpful_rate: number | null
+}
+
+export interface AccountActivity {
+  id: string
+  type: 'chat' | 'advisor' | 'feedback'
+  title: string
+  summary: string
+  occurred_at: string
+  resource_id: string
+}
+
+export interface AccountDashboard {
+  stats: AccountStats
+  joined_days: number
+  growth_level: number
+  interests: { product_preferences: string[]; intent_distribution: Record<string, number> }
+  trend: Array<{ date: string; count: number }>
+  recent_activities: AccountActivity[]
+}
+
+export interface AccountActivityPage {
+  items: AccountActivity[]
+  next_cursor: string | null
+}
+
 export interface KnowledgeBase {
   id: string
   name: string

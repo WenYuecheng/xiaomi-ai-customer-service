@@ -8,7 +8,12 @@ import AiTracePanel from '@/components/chat/AiTracePanel.vue'
 import { useAdvisorLab } from '@/composables/useAdvisorLab'
 
 const advisor = useAdvisorLab()
-onMounted(() => { void advisor.load().catch((reason) => { advisor.error.value = reason instanceof Error ? reason.message : '加载失败' }) })
+onMounted(() => {
+  void advisor.load().then(async () => {
+    const sessionId = new URLSearchParams(window.location.search).get('session_id')
+    if (sessionId) await advisor.selectSession(sessionId)
+  }).catch((reason) => { advisor.error.value = reason instanceof Error ? reason.message : '加载失败' })
+})
 </script>
 
 <template>

@@ -28,6 +28,7 @@ import { ChatStreamError } from '@/api/chat'
 
 describe('ChatView ticket creation', () => {
   beforeEach(() => {
+    window.history.replaceState({}, '', '/')
     localStorage.clear()
     localStorage.setItem('xmcs_last_conversation', 'conversation-1')
     mocks.get.mockImplementation((url: string) => {
@@ -49,6 +50,9 @@ describe('ChatView ticket creation', () => {
           },
         })
       }
+      if (url === '/conversations/conversation-route') {
+        return Promise.resolve({ data: { knowledge_base_id: 'kb-1', messages: [] } })
+      }
       if (url === '/operations/profile/me') {
         return Promise.resolve({ data: { product_preferences: [], intent_distribution: {}, feedback_summary: {}, event_count: 0 } })
       }
@@ -59,6 +63,14 @@ describe('ChatView ticket creation', () => {
     })
     mocks.post.mockResolvedValue({ data: { id: 'ticket-1' } })
     mocks.streamChat.mockReset()
+  })
+
+  it('restores the conversation explicitly selected from personal activity history', async () => {
+    window.history.replaceState({}, '', '/chat?conversation_id=conversation-route')
+    mount(ChatView, { global: { stubs: { 'el-alert': true, 'el-button': true, 'el-drawer': true, 'el-option': true, 'el-select': true } } })
+    await flushPromises()
+
+    expect(mocks.get).toHaveBeenCalledWith('/conversations/conversation-route')
   })
 
   it('shows a persistent created state after the user creates a ticket', async () => {

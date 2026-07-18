@@ -64,7 +64,8 @@ onMounted(async () => {
     const response = await api.get<{ items: KnowledgeBase[] }>('/knowledge-bases')
     knowledgeBases.value = response.data.items.filter((item) => item.status === 'active')
     knowledgeBaseId.value = knowledgeBases.value[0]?.id ?? ''
-    const saved = localStorage.getItem(STORAGE_KEY)
+    const requested = new URLSearchParams(window.location.search).get('conversation_id')
+    const saved = requested || localStorage.getItem(STORAGE_KEY)
     if (saved) await restoreConversation(saved)
     await loadInsights()
   } catch (reason) { error.value = classifyError(reason) }

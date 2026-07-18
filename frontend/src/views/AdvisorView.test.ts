@@ -9,9 +9,11 @@ import AdvisorBriefForm from '@/components/advisor/AdvisorBriefForm.vue'
 
 describe('AdvisorView', () => {
   beforeEach(() => {
+    window.history.replaceState({}, '', '/')
     mocks.get.mockImplementation((url: string) => {
       if (url === '/knowledge-bases') return Promise.resolve({ data: { items: [{ id: 'kb-1', name: '官方资料', status: 'active' }] } })
       if (url === '/advisor/sessions') return Promise.resolve({ data: { items: [] } })
+      if (url === '/advisor/sessions/session-route') return Promise.resolve({ data: { id: 'session-route', turns: [] } })
       throw new Error(`unexpected GET ${url}`)
     })
     mocks.streamAdvisor.mockImplementation(async (_url, _payload, handlers) => {
@@ -21,6 +23,14 @@ describe('AdvisorView', () => {
       handlers.onSources([])
       handlers.onDone({ status: 'completed' })
     })
+  })
+
+  it('restores the advisor session selected from personal history', async () => {
+    window.history.replaceState({}, '', '/advisor?session_id=session-route')
+    mount(AdvisorView, { global: { stubs: { 'el-alert': true, AdvisorBriefForm: true, AdvisorPlanCard: true, AiTracePanel: true, AdvisorHistory: true } } })
+    await flushPromises()
+
+    expect(mocks.get).toHaveBeenCalledWith('/advisor/sessions/session-route')
   })
 
   it('shows the visible AI lab and streams a submitted brief', async () => {
