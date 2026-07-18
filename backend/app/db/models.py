@@ -1,3 +1,14 @@
+"""
+文件职责：
+定义系统内所有的持久化数据模型（实体表），并声明它们之间的关联关系。
+
+所属功能：
+核心基础设施 -> 数据库访问层 -> 数据模型定义。
+
+设计说明：
+统一使用 UUID(str) 作为主键；所有时间采用带时区的 DateTime（存储 UTC 时间）。
+"""
+
 from datetime import UTC, datetime
 from enum import StrEnum
 from uuid import uuid4
@@ -24,18 +35,36 @@ def utcnow() -> datetime:
 
 
 class UserRole(StrEnum):
+    """
+    用户角色枚举：
+    - admin: 管理员，拥有全站所有权限。
+    - operator: 运营人员，管理知识库、文档与查看运营数据。
+    - user: 普通 C 端用户，只能进行会话问答与提交反馈工单。
+    """
+
     admin = "admin"
     operator = "operator"
     user = "user"
 
 
 class User(Base):
+    """
+    数据模型：用户表 (users)
+    业务含义：保存系统中所有注册的账号信息。
+    数据来源：管理员初始化脚本（如 init-demo 命令）或注册接口。
+    关联约束：一个用户可以拥有多个知识库（knowledge_bases）。
+    """
+
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    # 登录使用的唯一标识符
     username: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    # 经过 bcrypt 加密后的密码散列值，绝不能返回给客户端
     password_hash: Mapped[str] = mapped_column(String(128))
+    # 用户角色，决定其操作权限
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.user)
+    # 逻辑删除/封禁标识，为 False 时无法登录
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -43,14 +72,24 @@ class User(Base):
 
 
 class KnowledgeBase(Base):
+    """
+    数据模型：知识库表 (knowledge_bases)
+    业务含义：用于对文档资料和向量检索集进行逻辑隔离分组。不同会话可绑定不同的知识库。
+    关联约束：级联管理包含的所有文档 (documents)，若知识库删除，其下的所有文档记录一并删除。
+    """
+
     __tablename__ = "knowledge_bases"
     __table_args__ = (UniqueConstraint("name", name="uq_knowledge_base_name"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    # 知识库名称，全局唯一
     name: Mapped[str] = mapped_column(String(100), index=True)
     description: Mapped[str | None] = mapped_column(Text)
+    # 状态字段：active, inactive 等
     status: Mapped[str] = mapped_column(String(20), default="active", index=True)
+    # 创建此知识库时选择的文本向量化（Embedding）模型标识，后续此库所有文档均用该模型解析
     embedding_model: Mapped[str] = mapped_column(String(100), default="mock-hash-embedding")
+    # 创建人 ID
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(

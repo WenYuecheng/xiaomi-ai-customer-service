@@ -1,3 +1,11 @@
+"""
+文件职责：
+封装底层向量数据库（ChromaDB）和文本嵌入（Embeddings）模型适配。
+
+所属功能：
+RAG 引擎 -> 向量存储与特征提取。
+"""
+
 import hashlib
 import math
 from pathlib import Path
@@ -12,7 +20,11 @@ from app.core.config import Settings
 
 
 class HashEmbeddings(Embeddings):
-    """Deterministic character n-gram embeddings for offline tests and demos."""
+    """
+    内部辅助类：
+    基于字符 N-Gram 和 SHA256 哈希的确定性伪向量计算。
+    仅用于脱机测试和 Mock 演示，避免在开发阶段依赖真实 GPU 或大模型 API。
+    """
 
     dimensions = 256
 
@@ -37,7 +49,12 @@ class HashEmbeddings(Embeddings):
 
 
 class BgeEmbeddings(Embeddings):
-    """Lazy FastEmbed adapter for a compact, CPU-only local BGE runtime."""
+    """
+    内部辅助类：
+    基于 FastEmbed 的轻量级本地 BGE 模型适配器。
+    支持在无独立 GPU 环境下，通过 ONNX Runtime 利用 CPU 提供高质量的中文向量嵌入。
+    通过懒加载防止启动时卡顿，并在需要时下载模型至指定缓存目录。
+    """
 
     def __init__(self, model_name: str, cache_dir: str | Path | None = None) -> None:
         try:
@@ -79,6 +96,11 @@ def create_embeddings(settings: Settings) -> Embeddings:
 
 
 class VectorStoreService:
+    """
+    核心业务服务：
+    提供知识库分片的持久化和检索能力。内部使用 ChromaDB，并针对不同知识库创建独立的 Collection。
+    """
+
     def __init__(self, root: Path, embeddings: Embeddings | None = None) -> None:
         self.root = root
         self.embeddings = embeddings or HashEmbeddings()

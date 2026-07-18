@@ -1,3 +1,12 @@
+"""
+文件职责：
+商品推荐与机器学习模型训练模块。
+包含一套简易的实时多路召回（倾向性 + 热门）以及一套可训练的 SVD 矩阵分解（协同过滤）离线推荐演示。
+
+所属功能：
+运营分析与推荐 -> 推荐引擎核心。
+"""
+
 import hashlib
 import json
 from collections import Counter
@@ -23,6 +32,16 @@ class TrainingOutcome:
 
 
 def recommend(session: Session, user_id: str, knowledge_base_id: str) -> RecommendationList:
+    """
+    实时推荐算法（基于规则的多路召回加权）：
+
+    推荐得分 = 60% 用户自身历史偏好打分 + 25% 平台全局热门商品打分 + 15% 内容固有权重
+
+    1. 提取当前用户问过的商品。
+    2. 提取全局用户问过的商品。
+    3. 为知识库中存在的所有产品进行上述加权打分，并排序输出前 10 个。
+    4. 若用户完全无历史，属于冷启动 (`cold_start`)，则完全依赖全局热度。
+    """
     chunks = list(
         session.scalars(
             select(DocumentChunk).where(DocumentChunk.knowledge_base_id == knowledge_base_id)
@@ -60,6 +79,19 @@ def recommend(session: Session, user_id: str, knowledge_base_id: str) -> Recomme
 
 
 def train_recommender(session: Session, artifact_dir, target: str = "balanced") -> TrainingOutcome:
+    """
+    离线训练机制：基于用户-物品交互矩阵的 SVD (奇异值分解) 协同过滤模型训练。
+
+    1. 搜集数据库中用户对话里提到的产品作为交互行为。
+    2. 当有效用户和有效产品较少时，降级使用内置的静态
+       `clearly-labelled-demo-interactions` 演示矩阵。
+    3. 通过哈希指纹 `data_fingerprint` 避免数据无变化时的重复训练浪费资源。
+    4. 采用留一法（Leave-One-Out）进行模型评估。提取每个用户的最后一个
+       点击物品作为预测基准，其余作为训练数据。
+    5. 利用 Scikit-Learn 的 `TruncatedSVD` 进行降维和特征提取。
+    6. 计算并输出 `Precision@K` 和 `Recall@K`。
+    7. 将训练出的矩阵权重作为产物 (Artifact) 持久化成 JSON 文件保存。
+    """
     user_preferences: dict[str, Counter[str]] = {}
     for event in session.scalars(select(BehaviorEvent).where(BehaviorEvent.event_type == "chat")):
         models = extract_product_models(str(event.payload.get("question", "")))

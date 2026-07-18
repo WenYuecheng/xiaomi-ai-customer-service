@@ -1,3 +1,11 @@
+"""
+文件职责：
+定义智能问答交互及会话管理相关的输入与输出传输模型（DTO）。
+
+所属功能：
+智能问答 -> 视图模型/DTO。
+"""
+
 from datetime import datetime
 from typing import Literal
 
@@ -5,6 +13,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class ChatRequest(BaseModel):
+    """前端向后端发起问答请求的结构。其中 conversation_id 若不传则开启新会话。"""
+
     knowledge_base_id: str
     conversation_id: str | None = None
     message: str = Field(min_length=1, max_length=4000)
@@ -24,6 +34,11 @@ class SourceResponse(BaseModel):
 
 
 class AiTraceStep(BaseModel):
+    """
+    流式传输中记录大模型思考与执行轨迹的数据结构。
+    用于在前端界面上展示类似“检索知识库”、“阅读文档”、“思考中”的过程动画。
+    """
+
     stage: Literal["understanding", "retrieval", "reranking", "generation", "grounding"]
     status: Literal["running", "completed", "skipped", "degraded", "failed"]
     engine: str

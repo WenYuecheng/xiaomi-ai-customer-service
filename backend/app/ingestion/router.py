@@ -1,3 +1,19 @@
+"""
+文件职责：
+定义文档接入模块的 HTTP 路由。处理文件上传、文档记录查询、分块内容查询、解析任务查询及重试等操作。
+
+所属功能：
+文档接入与处理 -> 路由层。
+
+外部入口：
+- POST `/api/v1/documents/upload` 上传文件并提交解析任务
+- GET `/api/v1/documents` 及详情
+- GET `/api/v1/documents/{id}/chunks` 查询切片
+- GET `/api/v1/jobs` 及详情
+- POST `/api/v1/jobs/{id}/retry` 任务重试
+- DELETE `/api/v1/documents/{id}` 删除文档
+"""
+
 import hashlib
 from pathlib import Path
 from typing import Annotated
@@ -34,6 +50,7 @@ ALLOWED_SUFFIXES = {".pdf", ".docx", ".txt", ".md"}
 
 
 def safe_original_name(filename: str | None) -> str:
+    """内部防范目录遍历攻击：仅提取文件名部分。"""
     name = Path((filename or "").replace("\\", "/")).name.strip()
     if not name or len(name) > 255:
         raise AppError(400, "invalid_filename", "文件名无效")
@@ -41,6 +58,9 @@ def safe_original_name(filename: str | None) -> str:
 
 
 def validate_signature(suffix: str, content: bytes) -> None:
+    """
+    内部安全校验：通过文件魔数（Magic Number）或试解码验证内容，防止伪造后缀名上传恶意文件。
+    """
     valid = True
     if suffix == ".pdf":
         valid = content.startswith(b"%PDF-")
@@ -66,6 +86,18 @@ async def upload_document(
     chunk_overlap: Annotated[int | None, Form(ge=0, le=800)] = None,
     source_url: Annotated[AnyHttpUrl | None, Form()] = None,
 ) -> UploadResponse:
+    """
+    功能：上传文档并入库
+
+    执行链：
+    1. 接收文件并进行参数、尺寸、格式和内容签名安全校验。
+    2. 将文件实体存储于本地指定路径（`data/uploads`）。
+    3. 生成 `Document` 和 `ProcessingJob` 数据库记录。
+    4. 通知后台异步任务 `worker.notify()`。
+
+    异常：
+    如果计算出的文件哈希在当前知识库下已存在，利用数据库约束报错 409。
+    """
     settings = request.app.state.settings
     knowledge_base = session.get(KnowledgeBase, knowledge_base_id)
     if not knowledge_base:
@@ -238,6 +270,13 @@ def delete_document(
     session: SessionDep,
     _current_user: AdminOrOperatorDep,
 ) -> None:
+    """
+    功能：删除指定的文档
+
+    副作用：
+    不仅删除关系型数据库中的记录，还需同步清理 VectorStore 中的向量片段，以及磁盘上的物理文件。
+    注意：使用 `missing_ok=True` 防止物理文件丢失导致的数据库记录无法删除。
+    """
     document = session.get(Document, document_id)
     if not document:
         raise AppError(404, "document_not_found", "文档不存在")

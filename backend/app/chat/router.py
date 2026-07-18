@@ -1,3 +1,17 @@
+"""
+文件职责：
+定义问答交互（Chat）及会话管理相关的 HTTP 路由接口。
+
+所属功能：
+智能问答 -> 路由层。
+
+外部入口：
+- POST `/api/v1/chat/completions` 发起问答（支持流式和非流式）
+- POST `/api/v1/chat/runs/{run_id}/cancel` 取剑流式生成
+- GET/DELETE `/api/v1/conversations/{id}` 获取会话历史/清空会话
+- POST `/api/v1/chat/feedback` 提交大模型回答反馈 (顶踩)
+"""
+
 import json
 from collections.abc import Iterable
 
@@ -57,6 +71,13 @@ def chat_completion(
     session: SessionDep,
     current_user: CurrentUserDep,
 ) -> ChatResponse | StreamingResponse:
+    """
+    功能：接收用户的核心提问，调用底层的检索与大模型生成流水线。
+
+    支持机制：
+    若 payload.stream=True，则返回 text/event-stream 的 SSE (Server-Sent Events) 流。
+    会在流中推送分析过程 (trace)、逐字生成的回答 (delta) 及检索来源 (sources)。
+    """
     if payload.stream:
         prepared = initialize_stream_chat(
             session,

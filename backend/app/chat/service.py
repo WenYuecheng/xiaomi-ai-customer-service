@@ -1,3 +1,13 @@
+"""
+文件职责：
+实现问答会话模块的业务逻辑。
+串联起 RAG 意图分析、上下文检索、重排序和最终大模型答案生成的复杂流水线。
+同时处理流式生成 (SSE) 及长会话的摘要压缩工作。
+
+所属功能：
+智能问答 -> 核心业务流水线编排。
+"""
+
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
 from time import perf_counter
@@ -42,6 +52,11 @@ INTENT_LABELS = {
 
 @dataclass
 class PreparedChat:
+    """
+    内部数据载体：
+    在整个分析、检索和流式生成的生命周期中，用于跨函数传递上下文状态，避免函数参数列表过长。
+    """
+
     user: User
     knowledge_base_id: str
     original_question: str
@@ -210,6 +225,12 @@ def get_or_create_conversation(
 
 
 def compact_history(conversation: Conversation) -> None:
+    """
+    长会话上下文压缩机制：
+    当一个会话内的消息数量超过 20 条时，将把最早的那部分历史聊天记录
+    折叠成简单的字符串摘要存储在 `summary` 中。
+    这保证了大模型的 Context 窗口不会无限制地随着聊天膨胀导致 Token 溢出，并节约费用。
+    """
     if len(conversation.messages) <= 20:
         return
     older = conversation.messages[:-10]
@@ -228,6 +249,12 @@ def initialize_stream_chat(
     question: str,
     conversation_id: str | None,
 ) -> PreparedChat:
+    """
+    流式问答的第一步：
+    1. 敏感词拦截（硬规则）。
+    2. 获取或创建会话 `Conversation`，将用户发出的 `Message` 入库。
+    3. 构建好最初步的 `PreparedChat` 上下文结构返回，为后续流式输出做准备。
+    """
     started = perf_counter()
     matched_sensitive_words = [word for word in settings.sensitive_words if word in question]
     if matched_sensitive_words:
@@ -304,6 +331,12 @@ def stream_preparation_steps(
     vector_store: VectorStoreService,
     prepared: PreparedChat,
 ) -> Iterator[AiTraceStep]:
+    """
+    流式问答的第二步：准备环节大流水线。
+    通过 Python `yield` 逐步执行并对外吐出当前的工作状态 (Trace)。
+    执行链：意图理解 -> 混合检索 -> (可选)结果重排序。
+    如果命中业务意图 (如转人工、查订单)，会直接终止并设置好 fallback 返回值，跳过后续生成。
+    """
     engine, model = model_identity(settings)
     running = AiTraceStep(
         stage="understanding",
@@ -768,6 +801,11 @@ def stream_prepared_chat(
     prepared: PreparedChat,
     is_cancelled: Callable[[], bool],
 ) -> Iterator[str]:
+    """
+    流式问答的第三步：调用大模型进行真正的文字生成。
+    通过迭代器 `yield` 一个个 Token，并将结果组装最终落库保存。
+    支持客户端中途取消生成 (通过 `is_cancelled` 标志检查)。
+    """
     if not prepared.requires_generation:
         for index in range(0, len(prepared.message.content), 12):
             if is_cancelled():

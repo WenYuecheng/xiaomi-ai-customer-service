@@ -1,3 +1,11 @@
+"""
+文件职责：
+处理用户对话行为的统计分析。基于行为日志（BehaviorEvent）提炼出热词、用户意图分布。
+
+所属功能：
+运营分析与推荐 -> 统计分析服务。
+"""
+
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 
@@ -20,6 +28,14 @@ def time_boundary(window: str) -> datetime:
 
 
 def hot_topics(session: Session, window: str) -> list[HotTopic]:
+    """
+    基于时间衰减权重的热词统计算法。
+
+    1. 获取指定时间窗口（如最近7天）的聊天日志。
+    2. 基于距离现在的时间长短计算权重衰减（越近发生的权重越高，公式：1 / (1 + age_hours / 24)）。
+    3. 提取用户提问中的具体产品型号（极高优先级）以及利用 jieba 拆分出来的专有名词。
+    4. 汇总得分并返回 Top 20 热词。
+    """
     events = list(
         session.scalars(
             select(BehaviorEvent).where(
@@ -62,6 +78,10 @@ def hot_topic_heatmap(session: Session, window: str) -> list[HotTopicHeatCell]:
 
 
 def build_user_profile(session: Session, user_id: str) -> UserProfileResponse:
+    """
+    基于单个用户的历史 BehaviorEvent，统计其最关心的产品 Top 10、
+    意图触发的分布（如查了几次物流，咨询了几次故障）及对机器人的评价反馈分布。
+    """
     events = list(
         session.scalars(
             select(BehaviorEvent)

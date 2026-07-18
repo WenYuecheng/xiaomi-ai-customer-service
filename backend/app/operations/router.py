@@ -1,3 +1,21 @@
+"""
+文件职责：
+定义后台运营、数据分析与个性化推荐相关的 HTTP 路由接口。
+
+所属功能：
+运营分析与推荐 -> 路由层。
+
+外部入口：
+- GET `/api/v1/mock/orders` 获取模拟订单 (展示“查询订单”意图使用)
+- POST/GET/PATCH `/api/v1/tickets` 客服工单管理
+- GET `/api/v1/operations/hot-topics` 获取热词及热点搜索趋势图
+- GET/DELETE `/api/v1/operations/profile/me` 获取/清除当前用户的会话画像
+- GET `/api/v1/recommendations` 获取基于用户画像的商品推荐
+- POST/GET `/api/v1/recommendation/training-runs`
+  发起或查询基于 SVD 矩阵分解的协同过滤推荐模型训练任务
+- GET `/api/v1/operations/logs` 及 `feedback`/`audit` 分别用于审计 AI 对话日志、点赞反馈及阻断日志
+"""
+
 import json
 from typing import Annotated, Literal
 

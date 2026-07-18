@@ -1,3 +1,11 @@
+"""
+文件职责：
+定义后台运营与数据分析相关的输入与输出传输模型（DTO）。
+
+所属功能：
+运营分析与推荐 -> 视图模型/DTO。
+"""
+
 from datetime import datetime
 from typing import Literal
 
@@ -51,12 +59,19 @@ class HotTopicHeatCell(BaseModel):
 
 
 class HotTopicList(BaseModel):
+    """热词排行及对应日期的热度分布（用于前端画热力图/折线图）"""
+
     window: str
     items: list[HotTopic]
     heatmap: list[HotTopicHeatCell] = Field(default_factory=list)
 
 
 class UserProfileResponse(BaseModel):
+    """
+    用户画像响应。汇总该用户近期交流最多的产品、
+    触发最多次的意图（如偏好知识咨询还是偏好查订单）及顶踩统计。
+    """
+
     user_id: str
     product_preferences: list[str]
     intent_distribution: dict[str, int]
@@ -71,6 +86,8 @@ class RecommendationItem(BaseModel):
 
 
 class RecommendationList(BaseModel):
+    """商品推荐列表。如果用户没有任何历史会话，cold_start 标志为 True。"""
+
     items: list[RecommendationItem]
     cold_start: bool
 

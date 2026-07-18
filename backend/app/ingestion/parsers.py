@@ -1,3 +1,11 @@
+"""
+文件职责：
+负责不同文件格式（pdf, docx, txt, md）的内容抽取和智能分块。
+
+所属功能：
+文档接入与处理 -> 解析与分块 (Chunking)。
+"""
+
 import re
 import unicodedata
 from dataclasses import dataclass
@@ -10,6 +18,8 @@ from pypdf import PdfReader
 
 @dataclass(frozen=True)
 class ParsedSection:
+    """代表从原始文档中粗略抽取的片段及其物理位置描述（如页码）"""
+
     text: str
     location: str
 
@@ -21,6 +31,10 @@ def clean_text(value: str) -> str:
 
 
 def load_sections(path: Path) -> list[ParsedSection]:
+    """
+    功能归属：文档解析。
+    根据文件后缀调度对应库（pypdf, python-docx）抽取出全文并附带简单位置。
+    """
     suffix = path.suffix.lower()
     if suffix in {".txt", ".md"}:
         return [ParsedSection(clean_text(path.read_text(encoding="utf-8-sig")), "全文")]
@@ -51,6 +65,11 @@ PRODUCT_MODEL_PATTERNS = (
 
 
 def extract_product_models(text: str) -> list[str]:
+    """
+    内部辅助函数：
+    使用正则表达式，从切分后的文本块中提取产品型号名称。
+    用于知识图谱的建立及后期查询过滤。
+    """
     models: set[str] = set()
     labels = ("小米", "红米", "Smart Band", "Robot Vacuum", "米家", "")
     for pattern, label in zip(PRODUCT_MODEL_PATTERNS, labels, strict=True):
@@ -63,6 +82,12 @@ def extract_product_models(text: str) -> list[str]:
 def split_sections(
     sections: list[ParsedSection], chunk_size: int, chunk_overlap: int
 ) -> list[tuple[str, str, list[str]]]:
+    """
+    功能归属：文档分块。
+    使用 Langchain 的 `RecursiveCharacterTextSplitter` 对粗略提取的章节
+    按字数和重叠长度进行平滑切分。
+    在此环节中调用 `extract_product_models` 获取每个切块对应的产品实体。
+    """
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,

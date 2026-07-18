@@ -1,3 +1,14 @@
+"""
+文件职责：
+定义文档处理流水线的核心逻辑服务。包括具体的文档解析、切分与向量库入库操作。
+
+所属功能：
+文档接入与处理 -> 核心业务服务。
+
+重要机制：
+所有的后台耗时操作（IO和模型推理）均通过此处的 `process_job` 执行，独立于 HTTP 请求生命周期之外。
+"""
+
 from datetime import UTC, datetime
 
 from sqlalchemy import delete, select, update
@@ -20,6 +31,22 @@ def process_job(
     vector_store: VectorStoreService,
     job_id: str,
 ) -> None:
+    """
+    功能归属：
+    文档接入与处理 -> 文档解析入库流水线。
+
+    函数职责：
+    读取任务指定的文档物理文件，通过 Langchain 分块，调用 Embedding 模型，
+    最后写入向量数据库，并在关系型数据库落表记录。
+
+    执行链：
+    `worker._run` → `process_job` → `load_sections` → `split_sections` → `vector_store.add_chunks`
+
+    错误处理：
+    内部通过大 `try-except` 包裹，若发生异常（如解析失败或向量数据库不可用），
+    会回滚事务并将错误信息记录在 Job 和 Document 实体中。
+    """
+    # 建立独立于请求的会话
     with session_factory() as session:
         job = session.get(ProcessingJob, job_id)
         if not job or job.status != JobStatus.queued:

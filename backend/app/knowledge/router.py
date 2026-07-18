@@ -1,3 +1,18 @@
+"""
+文件职责：
+定义知识库模块的 HTTP 路由接口，负责知识库的增删改查以及数据统计（分析与图谱）。
+
+所属功能：
+知识库管理 -> 路由层。
+
+外部入口：
+- GET `/api/v1/knowledge-bases` 列表
+- POST `/api/v1/knowledge-bases` 创建
+- GET/PATCH/DELETE `/api/v1/knowledge-bases/{id}` 详情、修改、删除
+- GET `/api/v1/knowledge-bases/{id}/analytics` 统计数据
+- GET `/api/v1/knowledge-bases/{id}/graph` 简易知识图谱数据
+"""
+
 from typing import Annotated
 
 from fastapi import APIRouter, Query, Request, status
@@ -25,6 +40,10 @@ router = APIRouter(prefix="/knowledge-bases", tags=["knowledge-bases"])
 
 
 def require_knowledge_base(session: Session, knowledge_base_id: str) -> KnowledgeBase:
+    """
+    内部辅助函数：根据 ID 获取知识库对象。
+    若不存在则抛出统一的 404 业务异常，减少各路由中的重复判空逻辑。
+    """
     item = session.get(KnowledgeBase, knowledge_base_id)
     if not item:
         raise AppError(404, "knowledge_base_not_found", "知识库不存在")
@@ -32,6 +51,9 @@ def require_knowledge_base(session: Session, knowledge_base_id: str) -> Knowledg
 
 
 def product_category(product: str) -> str:
+    """
+    内部辅助函数：根据提取到的产品型号字符串，通过关键字匹配粗略归类产品分类。
+    """
     value = product.lower()
     if any(term in value for term in ("手环", "watch", "手表", "buds", "耳机")):
         return "智能穿戴"
@@ -170,6 +192,16 @@ def create_knowledge_base(
     session: SessionDep,
     current_user: AdminOrOperatorDep,
 ) -> KnowledgeBaseResponse:
+    """
+    功能：创建新知识库
+
+    入口限制：
+    仅 Admin 或 Operator 角色可调用。
+
+    异常处理：
+    利用数据库名称唯一约束（uq_knowledge_base_name），捕获 IntegrityError
+    返回 409 冲突，而不是先 select 再 insert 导致并发问题。
+    """
     item = KnowledgeBase(
         name=payload.name.strip(),
         description=payload.description,

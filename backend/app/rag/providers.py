@@ -1,3 +1,11 @@
+"""
+文件职责：
+定义并适配大语言模型 (LLM) 服务，包括意图分析、文档重排、答案生成和流式输出。
+
+所属功能：
+RAG 引擎 -> LLM 驱动层。
+"""
+
 import json
 from collections.abc import Iterator
 from typing import Literal, Protocol
@@ -34,6 +42,8 @@ relevance_score 必须在 0 到 1 之间。只能使用输入中已有的 chunk_
 
 
 class QuestionAnalysis(BaseModel):
+    """大模型结构化输出的 Schema：描述解析后的用户提问意图"""
+
     intent: Literal[
         "knowledge_query",
         "product_comparison",
@@ -79,6 +89,14 @@ class RerankResult(BaseModel):
 
 
 class ChatProvider(Protocol):
+    """
+    接口定义：规范大语言模型必须提供的 4 项核心能力。
+    1. analyze: 分析用户意图及指代消解
+    2. rerank: 根据上下文对召回切片进行二次重排
+    3. generate: 基于知识库一揽子生成回答
+    4. stream: 生成并在通道流式返回打字机效果
+    """
+
     def analyze(
         self,
         question: str,
@@ -111,6 +129,10 @@ class ChatProvider(Protocol):
 
 
 class MockChatProvider:
+    """
+    本地开发测试用 Mock 提供者。基于硬编码正则表达式与关键字返回预置的大模型分析与生成结果。
+    """
+
     def analyze(
         self,
         question: str,
@@ -189,6 +211,11 @@ class MockChatProvider:
 
 
 class LangChainChatProvider:
+    """
+    生产级 LLM 提供者适配。
+    通过 Langchain 的 `with_structured_output` 提供具有强类型约束的意图分析与重排。
+    """
+
     def __init__(self, model) -> None:
         self.model = model
 
