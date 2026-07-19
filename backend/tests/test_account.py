@@ -1,3 +1,18 @@
+"""
+文件职责：
+该文件负责测试账户相关的 API 功能，包括用户注册、资料更新、密码修改以及个人主页仪表盘数据的获取。
+
+所属功能：
+用户认证与账户管理 (User Authentication & Account Management)
+
+主要流程：
+1. 测试正常用户注册流程。
+2. 测试注册时的边界条件与异常处理。
+3. 测试用户修改显示名称和头像。
+4. 测试密码修改及安全机制。
+5. 测试个人主页数据的聚合和权限隔离。
+"""
+
 from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
@@ -23,6 +38,21 @@ def test_register_creates_normalized_user_and_returns_authenticated_session(
     client: TestClient,
     application,
 ) -> None:
+    """
+    测试正常提交注册信息后，可以建立经过正常化处理（如去除两端空格、转小写等）的用户，
+    并直接返回可以用于校验身份的授权 Token。
+
+    Args:
+        client: 测试客户端。
+        application: ASGI 应用对象，用于取得后台 session_factory 查询验证。
+
+    Returns:
+        None
+
+    Raises:
+        AssertionError: 响应不是 201 注册成功，或存储到 DB 中的对象信息有误。
+    """
+    # 提交带有不规则空格和大写的 username 请求
     response = client.post(
         "/api/v1/auth/register",
         json={
@@ -51,6 +81,19 @@ def test_register_creates_normalized_user_and_returns_authenticated_session(
 
 
 def test_register_rejects_weak_password_mismatch_and_role_escalation(client: TestClient) -> None:
+    """
+    测试各种由于安全条件不足和恶意提权的无效注册会被系统拒绝。
+
+    Args:
+        client: 测试客户端。
+
+    Returns:
+        None
+
+    Raises:
+        AssertionError: 如果系统通过了这些包含不合规参数的请求（未返回 422 校验错）。
+    """
+    # 模拟弱密码注册请求
     weak = client.post(
         "/api/v1/auth/register",
         json={"username": "weak_user", "password": "password", "password_confirm": "password"},
@@ -78,6 +121,19 @@ def test_register_rejects_weak_password_mismatch_and_role_escalation(client: Tes
 
 
 def test_register_rejects_duplicate_username_and_rate_limits_source(client: TestClient) -> None:
+    """
+    测试相同的用户名再次注册会被拒绝，并且同一来源过快的重复请求会触发频控拦截。
+
+    Args:
+        client: 测试客户端。
+
+    Returns:
+        None
+
+    Raises:
+        AssertionError: 重复注册未返回 409，或短时间高频请求未返回 429。
+    """
+    # 预设一条标准注册负载并产生第一条记录
     payload = {
         "username": "limited_user",
         "password": "Password123",
@@ -100,6 +156,19 @@ def test_user_can_update_display_name_and_whitelisted_avatar(
     client: TestClient,
     users: dict[str, str],
 ) -> None:
+    """
+    测试用户资料编辑接口允许修改显示名并且仅允许使用系统预设的合法头像键值。
+
+    Args:
+        client: 测试客户端。
+        users: 预置用户字典。
+
+    Returns:
+        None
+
+    Raises:
+        AssertionError: 正常更新未返回 200，或者异常更新未遭到校验拦截。
+    """
     headers = auth_headers(client, "customer", users["customer"])
 
     updated = client.patch(
@@ -124,6 +193,20 @@ def test_change_password_invalidates_old_tokens_and_never_audits_secrets(
     application,
     users: dict[str, str],
 ) -> None:
+    """
+    测试修改密码后旧的 Token 会失效，且由于安全合规原因，审计记录中不能包含密码等敏感信息。
+
+    Args:
+        client: 测试客户端。
+        application: 应用对象。
+        users: 预置用户字典。
+
+    Returns:
+        None
+
+    Raises:
+        AssertionError: 改密流程被异常阻断、旧 Token 仍能访问，或审计信息内含敏感密码。
+    """
     headers = auth_headers(client, "customer", users["customer"])
     wrong = client.post(
         "/api/v1/account/change-password",
@@ -166,8 +249,24 @@ def test_account_dashboard_and_cursor_activity_are_grounded_and_user_isolated(
     application,
     users: dict[str, str],
 ) -> None:
+    """
+    测试账户主页和活动游标分页接口可以返回正确编排好的数据，同时必须满足多租户间数据不发生越权。
+    需要构造复杂的历史聊天、顾问会话、评价反馈等信息以进行验证。
+
+    Args:
+        client: 测试客户端。
+        application: 应用对象。
+        users: 预置用户字典。
+
+    Returns:
+        None
+
+    Raises:
+        AssertionError: 最终主页各项统计数值不符合预设入库条件，或活动列表条目缺失/排序有误。
+    """
     now = datetime.now(UTC)
     with application.state.session_factory() as session:
+        # 获取系统内的普通顾客及操作员以分配属主
         customer = session.scalar(select(User).where(User.username == "customer"))
         operator = session.scalar(select(User).where(User.username == "operator"))
         assert customer is not None and operator is not None
@@ -238,6 +337,7 @@ def test_account_dashboard_and_cursor_activity_are_grounded_and_user_isolated(
         )
         session.commit()
 
+    # 使用该顾客身份访问包含刚刚插入数据的仪表盘和活动轨迹
     headers = auth_headers(client, "customer", users["customer"])
     dashboard = client.get("/api/v1/account/dashboard", headers=headers)
     first_page = client.get("/api/v1/account/activities?limit=2", headers=headers)

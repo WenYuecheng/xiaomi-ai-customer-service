@@ -1,3 +1,14 @@
+"""
+文件职责：
+该文件负责测试智能导购顾问（Advisor）相关的功能，包括方案生成、会话隔离、流式输出、敏感拦截与内容落地。
+
+所属功能：
+智能导购/顾问会话模块
+
+主要流程：
+提供测试用的知识库初始化函数，再通过一系列隔离的测试用例来验证导购生命周期中的各项核心逻辑。
+"""
+
 from io import BytesIO
 
 import pytest
@@ -15,6 +26,19 @@ from tests.test_documents import create_knowledge_base, wait_for_job
 
 
 def prepare_advisor_knowledge(client: TestClient, headers: dict[str, str]) -> str:
+    """
+    准备导购测试所需的测试知识库，并上传一篇 Markdown 格式的手机测试数据。
+
+    Args:
+        client: 用于发起请求的 TestClient。
+        headers: 鉴权相关的请求头信息。
+
+    Returns:
+        str: 生成的 knowledge_base_id，用于后续发起相关会话。
+
+    Raises:
+        AssertionError: 当上传文档的处理任务没有成功完成时。
+    """
     knowledge_base_id = create_knowledge_base(client, headers)
     content = """category: 手机
 product_models: 小米 14|REDMI K80
@@ -33,6 +57,11 @@ REDMI K80 配备 6550mAh 电池，支持 90W 有线快充，采用 2K 屏幕。
 
 
 def test_advisor_plan_rejects_sources_outside_candidate_whitelist() -> None:
+    """
+    测试导购方案的来源白名单机制：当模型返回的来源块 ID 不在提供给模型的上下文块 ID 白名单内时，
+    服务应该抛出 ValueError 拒绝接受，以避免模型“幻觉”捏造来源。
+    """
+    # 构造一个包含非法来源（invented）的伪造方案
     plan = AdvisorPlanDraft(
         title="手机选购方案",
         interpreted_need="重视续航",
@@ -56,13 +85,20 @@ def test_advisor_plan_rejects_sources_outside_candidate_whitelist() -> None:
     messages_seen: list[dict[str, str]] = []
 
     class StructuredModel:
+        """
+        用于模拟 LangChain 模型对象的 Mock 类，主要用于验证向模型传递的 prompt 或输出结构。
+        """
+
         def with_structured_output(self, schema, *, method: str):
+            # 确认传入的要求结构是预期的 AdvisorPlanDraft
             assert schema is AdvisorPlanDraft
             assert method == "json_mode"
 
             class Invoker:
                 def invoke(self, messages):
+                    # 记录并保存发送给模型的 messages，用于后续验证
                     messages_seen.extend(messages)
+                    # 返回之前伪造的、包含非法 source_chunk_ids 的 plan
                     return plan
 
             return Invoker()
@@ -79,7 +115,16 @@ def test_advisor_plan_rejects_sources_outside_candidate_whitelist() -> None:
 def test_advisor_session_is_saved_followed_up_and_user_isolated(
     client: TestClient, users: dict[str, str]
 ) -> None:
+    """
+    测试顾问会话的核心生命周期：
+    1. 正常创建并保存新会话。
+    2. 能正确地在同一个会话下发起追问。
+    3. 确保跨用户隔离，管理员或非所有者不能查看他人的会话。
+    4. 可以查询会话列表，并确保追问能够累积会话轮数。
+    5. 用户可以正常删除自己的会话。
+    """
     operator_headers = auth_headers(client, "operator", users["operator"])
+    # 预设管理员上传测试数据
     knowledge_base_id = prepare_advisor_knowledge(client, operator_headers)
     customer_headers = auth_headers(client, "customer", users["customer"])
 
@@ -138,6 +183,10 @@ def test_advisor_session_is_saved_followed_up_and_user_isolated(
 def test_advisor_stream_emits_trace_plan_sources_and_done(
     client: TestClient, users: dict[str, str]
 ) -> None:
+    """
+    测试导购的流式响应（SSE），确保能够按照预期的事件顺序下发各个阶段的事件数据。
+    预期的事件流顺序为：meta -> trace -> advisor -> sources -> done。
+    """
     operator_headers = auth_headers(client, "operator", users["operator"])
     knowledge_base_id = prepare_advisor_knowledge(client, operator_headers)
     customer_headers = auth_headers(client, "customer", users["customer"])
@@ -164,6 +213,11 @@ def test_advisor_stream_emits_trace_plan_sources_and_done(
 def test_sensitive_advisor_input_is_blocked_before_any_model_call(
     client: TestClient, users: dict[str, str], monkeypatch
 ) -> None:
+    """
+    测试敏感信息拦截机制：
+    当用户输入包含如密码等敏感词时，应在进入底层 LLM 服务之前被直接拦截，
+    返回 400 错误码和 sensitive_input 错误标识。
+    """
     calls = 0
 
     def forbidden_provider(_settings):
@@ -192,6 +246,11 @@ def test_sensitive_advisor_input_is_blocked_before_any_model_call(
 
 
 def test_advisor_retrieval_guarantees_a_query_for_each_requested_model(monkeypatch) -> None:
+    """
+    测试顾问的多商品检索策略：
+    当用户询问涉及多个产品型号时，检索阶段应为整个请求以及每个特定型号分别发起检索，
+    保证关于每个产品的资料都能被尽可能检索到。
+    """
     from app.advisor.service import retrieve_advisor_sources
 
     calls: list[str] = []
@@ -220,6 +279,11 @@ def test_advisor_retrieval_guarantees_a_query_for_each_requested_model(monkeypat
 
 
 def test_advisor_grounding_removes_unsupported_numbers_from_recommendation() -> None:
+    """
+    测试内容落地与对齐（Grounding）策略：
+    当模型生成的推荐结论中包含源数据中并不存在的数据（如捏造了 '42%' 这个数字）时，
+    Grounding 服务应将其判定为不受支持，并将其替换为“资料未明确”。
+    """
     from app.advisor.service import ground_plan
 
     plan = {

@@ -1,3 +1,17 @@
+"""
+文件职责：
+封装基于 LLM 的文档片段二次重排（Rerank）逻辑。
+
+所属功能：
+RAG 引擎 -> 检索后处理（Post-Retrieval）。
+
+主要流程：
+1. 接收粗略召回的候选片段。
+2. 构造 RerankCandidate 结构传递给大模型提供方。
+3. 捕获重排结果，根据最小阈值剔除不相关片段。
+4. 提供优雅降级机制：如果 LLM 重排异常，退化使用原始向量检索的相似度排序。
+"""
+
 from dataclasses import replace
 
 from app.rag.providers import ChatProvider, RerankCandidate
@@ -10,6 +24,27 @@ def rerank_sources(
     top_k: int,
     min_score: float,
 ) -> tuple[list, str, str, list[str]]:
+    """
+    对粗排阶段生成的候选片段进行基于大模型的二次细排（Rerank）。
+
+    主要职责：
+    借助 LLM 强大的语境理解能力，剔除字面相似但语义不符合用户提问意图的“假阳性”片段。
+    支持容错降级，避免因为单次 LLM 超时或解析失败导致整个检索链路断裂。
+
+    Args:
+        provider: 执行重排请求的大模型提供者。
+        question: 用户原始或重写后的提问。
+        candidates: 第一阶段（粗排）召回的候选数据列表（元素需要包含 chunk_id、snippet 等）。
+        top_k: 期望保留的最大片段数量。
+        min_score: 允许被采纳的最小相关性分数阈值（0.0 ~ 1.0）。
+
+    Returns:
+        返回一个包含 4 个元素的元组：
+        - selected (list): 经过筛选与重新排序，并限制数量的候选列表。
+        - status (str): 当前重排状态，"completed" 或 "degraded"。
+        - message (str): 可读的状态描述信息。
+        - details (list[str]): 对每个候选片段筛选决定的详细记录（如保留理由）。
+    """
     try:
         result = provider.rerank(
             question,

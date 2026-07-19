@@ -1,1 +1,10 @@
-"""Authentication and role-based access control."""
+"""
+文件职责：
+该文件负责标识认证与角色权限控制（Auth）模块，并可用于对外暴露公共接口。
+
+所属功能：
+用户认证（Authentication）与基于角色的访问控制（RBAC）。
+
+主要流程：
+作为包的入口，通常不包含复杂的业务逻辑。
+"""

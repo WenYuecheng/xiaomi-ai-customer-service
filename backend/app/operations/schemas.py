@@ -4,6 +4,9 @@
 
 所属功能：
 运营分析与推荐 -> 视图模型/DTO。
+
+主要流程：
+利用 Pydantic 的 BaseModel，定义各类分析统计、推荐返回、训练记录及工单数据的强类型和序列化规则。
 """
 
 from datetime import datetime

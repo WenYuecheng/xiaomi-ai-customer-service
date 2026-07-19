@@ -4,6 +4,11 @@
 
 所属功能：
 文档接入与处理 -> 解析与分块 (Chunking)。
+
+主要流程：
+1. 根据文件类型调用对应的提取库获取全文文本
+2. 使用正则表达式和固定关键词进行产品实体识别
+3. 使用 LangChain 文本切分器按特定分隔符切块
 """
 
 import re
@@ -25,6 +30,18 @@ class ParsedSection:
 
 
 def clean_text(value: str) -> str:
+    """
+    内部辅助函数：清理抽取出的文本，去除不可见字符、多余的空格和空行。
+
+    主要职责：
+    提高最终向量嵌入质量以及 LLM 提示词的纯净度。
+
+    Args:
+        value: 原始未经处理的抽取文本。
+
+    Returns:
+        清理完成的文本字符串。
+    """
     value = unicodedata.normalize("NFKC", value).replace("\x00", "")
     lines = [re.sub(r"[ \t]+", " ", line).strip() for line in value.splitlines()]
     return "\n".join(line for line in lines if line).strip()
@@ -32,8 +49,19 @@ def clean_text(value: str) -> str:
 
 def load_sections(path: Path) -> list[ParsedSection]:
     """
-    功能归属：文档解析。
-    根据文件后缀调度对应库（pypdf, python-docx）抽取出全文并附带简单位置。
+    根据文件后缀，调度对应库（pypdf, python-docx）抽取出全文文本并附带简单位置。
+
+    主要职责：
+    作为文件解析入口，将非结构化文件转换成结构化的 `ParsedSection` 列表。
+
+    Args:
+        path: 本地文件系统中的待解析文件路径。
+
+    Returns:
+        包含提取到的文本及对应段落/页码位置的列表。
+
+    Raises:
+        ValueError: 当遇到不支持的文件后缀时抛出。
     """
     suffix = path.suffix.lower()
     if suffix in {".txt", ".md"}:
@@ -66,9 +94,16 @@ PRODUCT_MODEL_PATTERNS = (
 
 def extract_product_models(text: str) -> list[str]:
     """
-    内部辅助函数：
-    使用正则表达式，从切分后的文本块中提取产品型号名称。
-    用于知识图谱的建立及后期查询过滤。
+    内部辅助函数：使用正则表达式，从切分后的文本块中提取产品型号名称。
+
+    主要职责：
+    用于建立知识图谱以及在检索（RAG）后期提供硬过滤所需的实体标签，提高检索准确率。
+
+    Args:
+        text: 待扫描的文本切块。
+
+    Returns:
+        提取到的所有不同产品型号列表，且自动去重并按字典序排列。
     """
     models: set[str] = set()
     labels = ("小米", "红米", "Smart Band", "Robot Vacuum", "米家", "")
@@ -83,10 +118,19 @@ def split_sections(
     sections: list[ParsedSection], chunk_size: int, chunk_overlap: int
 ) -> list[tuple[str, str, list[str]]]:
     """
-    功能归属：文档分块。
-    使用 Langchain 的 `RecursiveCharacterTextSplitter` 对粗略提取的章节
-    按字数和重叠长度进行平滑切分。
-    在此环节中调用 `extract_product_models` 获取每个切块对应的产品实体。
+    对粗略提取出的章节，按字数和重叠长度进行平滑切块。
+
+    主要职责：
+    使用 Langchain 的 `RecursiveCharacterTextSplitter` 对文本进行拆解，以满足
+    向量数据库及模型上下文限制要求，并同步调用 `extract_product_models` 获取对应切块产品实体。
+
+    Args:
+        sections: 粗提取得到的 `ParsedSection` 结构列表。
+        chunk_size: 切块的最大字符数。
+        chunk_overlap: 两个连续切块间的最大重叠字符数。
+
+    Returns:
+        返回 `(文本内容, 来源位置, 包含的产品实体列表)` 元组化结构构成的列表。
     """
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,

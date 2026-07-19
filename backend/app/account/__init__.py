@@ -1,1 +1,10 @@
-"""Current-user profile, security settings, and personal dashboard."""
+"""
+文件职责：
+该文件负责账号模块（account）的初始化。
+
+所属功能：
+当前用户画像、安全设置以及个人仪表盘功能。
+
+主要流程：
+作为模块入口，无特定业务流程。
+"""

@@ -3,9 +3,10 @@
 定义知识库模块的 HTTP 路由接口，负责知识库的增删改查以及数据统计（分析与图谱）。
 
 所属功能：
-知识库管理 -> 路由层。
+知识库管理服务（Knowledge Base Service） -> 路由层。
 
-外部入口：
+主要流程：
+定义了相关的 RESTful API 端点：
 - GET `/api/v1/knowledge-bases` 列表
 - POST `/api/v1/knowledge-bases` 创建
 - GET/PATCH/DELETE `/api/v1/knowledge-bases/{id}` 详情、修改、删除
@@ -42,7 +43,20 @@ router = APIRouter(prefix="/knowledge-bases", tags=["knowledge-bases"])
 def require_knowledge_base(session: Session, knowledge_base_id: str) -> KnowledgeBase:
     """
     内部辅助函数：根据 ID 获取知识库对象。
-    若不存在则抛出统一的 404 业务异常，减少各路由中的重复判空逻辑。
+
+    主要职责：
+    通过数据库会话获取特定的知识库实例，若不存在则抛出统一的 404 业务异常，
+    以此减少各路由中的重复判空逻辑，保持路由代码的简洁。
+
+    Args:
+        session: 当前的数据库会话。
+        knowledge_base_id: 需要查询的知识库 ID。
+
+    Returns:
+        找到的 KnowledgeBase 数据库实例。
+
+    Raises:
+        AppError: 当查询不到对应的知识库时，抛出 404 异常。
     """
     item = session.get(KnowledgeBase, knowledge_base_id)
     if not item:
@@ -53,6 +67,15 @@ def require_knowledge_base(session: Session, knowledge_base_id: str) -> Knowledg
 def product_category(product: str) -> str:
     """
     内部辅助函数：根据提取到的产品型号字符串，通过关键字匹配粗略归类产品分类。
+
+    主要职责：
+    用于生成知识分析与知识图谱展示时的节点归属类别（如“智能穿戴”、“手机”等）。
+
+    Args:
+        product: 产品型号字符串（如 "xiaomi watch s3"）。
+
+    Returns:
+        对应的中文产品类别（str）。
     """
     value = product.lower()
     if any(term in value for term in ("手环", "watch", "手表", "buds", "耳机")):
@@ -72,7 +95,23 @@ def knowledge_analytics(
     session: SessionDep,
     _current_user: AdminOrOperatorDep,
 ) -> KnowledgeAnalyticsResponse:
+    """
+    获取指定知识库的数据分析看板指标。
+
+    主要职责：
+    查询统计当前知识库下的文档数量、片段总数、涵盖的设备产品线以及各类别的统计分布，
+    返回供前端可视化图表使用的核心数据。
+
+    Args:
+        knowledge_base_id: 知识库的 UUID。
+        session: 依赖注入的数据库会话。
+        _current_user: 权限校验依赖，需 Admin 或 Operator。
+
+    Returns:
+        KnowledgeAnalyticsResponse: 包含汇总统计信息的响应对象。
+    """
     require_knowledge_base(session, knowledge_base_id)
+    # 获取所有的文档及分块
     documents = list(
         session.scalars(select(Document).where(Document.knowledge_base_id == knowledge_base_id))
     )
@@ -81,12 +120,19 @@ def knowledge_analytics(
             select(DocumentChunk).where(DocumentChunk.knowledge_base_id == knowledge_base_id)
         )
     )
+
+    # 从切片中提取所有独特的产品模型并排序
     products = sorted({product for chunk in chunks for product in chunk.product_models})
     category_counts: dict[str, int] = {}
+
+    # 按照业务逻辑统计各种设备类型的数量分布
     for product in products:
         category = product_category(product)
         category_counts[category] = category_counts.get(category, 0) + 1
+
+    # 计算带有来源 URL 的文档占比
     sourced = sum(1 for document in documents if document.source_url)
+
     return KnowledgeAnalyticsResponse(
         document_count=len(documents),
         chunk_count=len(chunks),
@@ -106,6 +152,21 @@ def knowledge_graph(
     session: SessionDep,
     _current_user: AdminOrOperatorDep,
 ) -> KnowledgeGraphResponse:
+    """
+    获取指定知识库的简易知识图谱数据。
+
+    主要职责：
+    提取该知识库下的文档、产品、品类之间的关联关系（节点和边），
+    供前端知识图谱组件（如 echarts / G6）渲染层级或网状可视化视图。
+
+    Args:
+        knowledge_base_id: 知识库的 UUID。
+        session: 依赖注入的数据库会话。
+        _current_user: 权限校验依赖，需 Admin 或 Operator。
+
+    Returns:
+        KnowledgeGraphResponse: 包含 nodes 和 edges 列表的对象。
+    """
     knowledge_base = require_knowledge_base(session, knowledge_base_id)
     documents = list(
         session.scalars(select(Document).where(Document.knowledge_base_id == knowledge_base_id))
@@ -115,9 +176,13 @@ def knowledge_graph(
             select(DocumentChunk).where(DocumentChunk.knowledge_base_id == knowledge_base_id)
         )
     )
+
+    # 构建从 文档 ID 到 其涵盖产品列表的映射
     models_by_document: dict[str, set[str]] = {}
     for chunk in chunks:
         models_by_document.setdefault(chunk.document_id, set()).update(chunk.product_models)
+
+    # 根节点：当前知识库本身
     nodes = [
         KnowledgeGraphNode(
             id=f"kb:{knowledge_base.id}",
@@ -129,8 +194,11 @@ def knowledge_graph(
     edges: list[KnowledgeGraphEdge] = []
     categories: set[str] = set()
     products: set[str] = set()
+
+    # 遍历处理各层级实体与关联线
     for document in documents:
         document_node = f"document:{document.id}"
+        # 添加文档节点，权重由相关切片数量决定
         nodes.append(
             KnowledgeGraphNode(
                 id=document_node,
@@ -139,17 +207,22 @@ def knowledge_graph(
                 value=max(1, sum(chunk.document_id == document.id for chunk in chunks)),
             )
         )
+
         document_products = models_by_document.get(document.id, set())
+        # 如果该文档未提取出任何实体，直接将其与知识库相连
         if not document_products:
             edges.append(
                 KnowledgeGraphEdge(
                     source=f"kb:{knowledge_base.id}", target=document_node, relation="包含文档"
                 )
             )
+
+        # 根据提取出的产品，连线 `知识库 -> 分类 -> 产品 -> 文档`
         for product in sorted(document_products):
             category = product_category(product)
             category_node = f"category:{category}"
             product_node = f"product:{product}"
+
             if category not in categories:
                 categories.add(category)
                 nodes.append(
@@ -179,9 +252,11 @@ def knowledge_graph(
                         source=category_node, target=product_node, relation="包含产品"
                     )
                 )
+            # 连接具体产品与其实体出处的文档
             edges.append(
                 KnowledgeGraphEdge(source=product_node, target=document_node, relation="来源文档")
             )
+
     return KnowledgeGraphResponse(nodes=nodes, edges=edges)
 
 
@@ -195,12 +270,15 @@ def create_knowledge_base(
     """
     功能：创建新知识库
 
+    主要职责：
+    接收用户参数实例化 `KnowledgeBase` 并在数据库中落表。
+
     入口限制：
     仅 Admin 或 Operator 角色可调用。
 
     异常处理：
-    利用数据库名称唯一约束（uq_knowledge_base_name），捕获 IntegrityError
-    返回 409 冲突，而不是先 select 再 insert 导致并发问题。
+    利用数据库名称唯一约束（uq_knowledge_base_name），捕获 `IntegrityError`
+    返回 409 冲突，避免了先 select 再 insert 可能导致的并发脏写问题。
     """
     item = KnowledgeBase(
         name=payload.name.strip(),

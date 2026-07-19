@@ -7,9 +7,13 @@
 
 外部入口：
 - POST `/api/v1/chat/completions` 发起问答（支持流式和非流式）
-- POST `/api/v1/chat/runs/{run_id}/cancel` 取剑流式生成
+- POST `/api/v1/chat/runs/{run_id}/cancel` 取消流式生成
 - GET/DELETE `/api/v1/conversations/{id}` 获取会话历史/清空会话
 - POST `/api/v1/chat/feedback` 提交大模型回答反馈 (顶踩)
+
+主要流程：
+接收 HTTP 请求 -> 验证用户身份(依赖注入) -> 解析输入载荷(Pydantic)
+-> 调用底层 service 层逻辑完成核心业务 -> 组装视图模型并返回(或以 SSE 形式返回流式数据)。
 """
 
 import json
@@ -58,6 +62,21 @@ def build_chat_response(
     advisor_session_id: str | None,
     advisor_plan: dict | None,
 ) -> ChatResponse:
+    """
+    组装非流式情况下的完整响应对象。
+
+    Args:
+        conversation: 当前对话实体。
+        message: 模型生成的回答消息。
+        sources: 检索到的知识库来源。
+        run_id: 本次生成的运行 ID。
+        ai_trace: 执行轨迹列表。
+        advisor_session_id: 顾问会话 ID（如果有）。
+        advisor_plan: 顾问计划字典（如果有）。
+
+    Returns:
+        ChatResponse: 标准化的回复数据结构。
+    """
     return ChatResponse(
         conversation_id=conversation.id,
         message_id=message.id,
@@ -82,11 +101,23 @@ def chat_completion(
     current_user: CurrentUserDep,
 ) -> ChatResponse | StreamingResponse:
     """
+    发起聊天完成请求（问答接口）。
+
     功能：接收用户的核心提问，调用底层的检索与大模型生成流水线。
 
     支持机制：
     若 payload.stream=True，则返回 text/event-stream 的 SSE (Server-Sent Events) 流。
     会在流中推送分析过程 (trace)、逐字生成的回答 (delta) 及检索来源 (sources)。
+    若 payload.stream=False，则等待全部生成完毕后返回统一的 ChatResponse。
+
+    Args:
+        request (Request): FastAPI 的 Request 对象。
+        payload (ChatRequest): 客户端请求的数据。
+        session (SessionDep): 数据库会话。
+        current_user (CurrentUserDep): 当前已认证的用户对象。
+
+    Returns:
+        ChatResponse | StreamingResponse: 取决于是否开启流式传输。
     """
     if payload.stream:
         prepared = initialize_stream_chat(
@@ -127,10 +158,12 @@ def chat_completion(
         )
 
     def encode_event(event: str, data: dict) -> bytes:
+        """将事件名和数据序列化为 SSE 规定的字节流格式。"""
         payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
         return f"event: {event}\ndata: {payload}\n\n".encode()
 
     def events() -> Iterable[bytes]:
+        """SSE 数据生成器，按步骤逐步产生事件。"""
         yield encode_event(
             "meta",
             {
@@ -199,6 +232,19 @@ def chat_completion(
 
 @router.post("/chat/runs/{run_id}/cancel")
 def cancel_run(request: Request, run_id: str, _current_user: CurrentUserDep) -> dict[str, bool]:
+    """
+    取消正在进行的流式生成。
+
+    通过将 run_id 写入全局应用状态，使得正在输出的流能够检查到取消标志并提早中断。
+
+    Args:
+        request: FastAPI请求对象。
+        run_id: 需要取消的任务ID。
+        _current_user: 身份验证。
+
+    Returns:
+        dict: 确认已接收取消请求的响应。
+    """
     request.app.state.cancelled_runs.add(run_id)
     return {"cancelled": True}
 
@@ -209,6 +255,22 @@ def conversation_history(
     session: SessionDep,
     current_user: CurrentUserDep,
 ) -> ConversationResponse:
+    """
+    获取指定会话的历史记录。
+
+    验证该会话是否属于当前用户，然后汇总消息以及相对应的行为轨迹（ai_trace）。
+
+    Args:
+        conversation_id: 目标会话ID。
+        session: 数据库会话。
+        current_user: 当前用户。
+
+    Raises:
+        AppError: 如果会话不存在或不属于该用户，返回 404。
+
+    Returns:
+        ConversationResponse: 包含整个对话树的视图对象。
+    """
     conversation = session.get(Conversation, conversation_id)
     if not conversation or conversation.user_id != current_user.id:
         raise AppError(404, "conversation_not_found", "会话不存在")
@@ -251,6 +313,20 @@ def clear_conversation(
     session: SessionDep,
     current_user: CurrentUserDep,
 ) -> Response:
+    """
+    删除指定的会话，清空记录。
+
+    Args:
+        conversation_id: 要删除的会话ID。
+        session: 数据库会话。
+        current_user: 当前请求的用户。
+
+    Raises:
+        AppError: 当找不到属于该用户的会话时抛出。
+
+    Returns:
+        Response: 返回 204 No Content 代表成功。
+    """
     conversation = session.get(Conversation, conversation_id)
     if not conversation or conversation.user_id != current_user.id:
         raise AppError(404, "conversation_not_found", "会话不存在")
@@ -265,6 +341,20 @@ def submit_feedback(
     session: SessionDep,
     current_user: CurrentUserDep,
 ) -> FeedbackResponse:
+    """
+    提交针对特定回答的用户反馈（顶、踩、纠错）。
+
+    Args:
+        payload: 包含评价结果的请求体。
+        session: 数据库会话。
+        current_user: 发起反馈的用户。
+
+    Raises:
+        AppError: 目标消息不存在或不是机器人的回复时抛出。
+
+    Returns:
+        FeedbackResponse: 反馈实体的最新状态。
+    """
     message = session.get(Message, payload.message_id)
     if (
         not message

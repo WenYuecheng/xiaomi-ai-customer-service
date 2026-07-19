@@ -1,6 +1,6 @@
 """
 文件职责：
-定义用户认证模块的 HTTP 路由接口（Controller 层），负责接收 HTTP 请求并编排业务服务。
+该文件负责定义用户认证模块的 HTTP 路由接口（Controller 层），接收 HTTP 请求并编排业务服务。
 
 所属功能：
 用户认证 -> 路由层。
@@ -51,16 +51,29 @@ def login(
     → create_access_token (签发 JWT)
     → TokenResponse (组装响应)
 
-    异常处理：
-    鉴权失败将由 `authenticate` 抛出 401 错误，并被全局异常处理器捕获返回。
+    Args:
+        request (Request): FastAPI 的请求对象。
+        session (SessionDep): 数据库会话依赖。
+        form (OAuth2PasswordRequestForm): 表单数据，包含 username 和 password。
+
+    Returns:
+        TokenResponse: 包含生成的 access_token 的响应对象。
+
+    Raises:
+        AppError: 鉴权失败时由 authenticate 抛出 401 错误。
     """
+    # 步骤 1：调用业务服务层进行身份验证
     user = authenticate(session, form.username, form.password)
+
+    # 步骤 2：认证成功后，为该用户签发 JWT 令牌
     token = create_access_token(
         user.id,
         user.role.value,
         request.app.state.settings,
         user.token_version,
     )
+
+    # 步骤 3：返回标准的 OAuth2 响应结构
     return TokenResponse(access_token=token)
 
 
@@ -70,9 +83,31 @@ def register(
     payload: RegisterRequest,
     session: SessionDep,
 ) -> AuthSessionResponse:
+    """
+    功能：用户注册
+
+    外部入口：
+    POST /api/v1/auth/register
+
+    Args:
+        request (Request): FastAPI 请求对象，用于获取全局限流器和客户端信息。
+        payload (RegisterRequest): 客户端传入的注册数据验证模型。
+        session (SessionDep): 数据库会话依赖。
+
+    Returns:
+        AuthSessionResponse: 包含新用户的 Token 和详细信息的响应体。
+
+    Raises:
+        AppError: 如果用户已存在或达到频率限制时抛出。
+    """
+    # 步骤 1：获取全局注册频率限制器，并检查当前客户端 IP 是否触发限流
     limiter: RegistrationRateLimiter = request.app.state.registration_rate_limiter
     limiter.check(request.client.host if request.client else "unknown")
+
+    # 步骤 2：调用服务层逻辑在数据库中创建用户记录
     user = create_user(session, payload.username, payload.password, UserRole.user.value)
+
+    # 步骤 3：记录用户注册的审计事件（行为日志）
     session.add(
         BehaviorEvent(
             user_id=user.id,
@@ -81,6 +116,8 @@ def register(
         )
     )
     session.commit()
+
+    # 步骤 4：自动为刚注册的用户签发登录令牌，免去其再次登录的步骤
     token = create_access_token(
         user.id,
         user.role.value,
@@ -100,5 +137,12 @@ def me(current_user: CurrentUserDep) -> UserResponse:
 
     流程位置：
     利用 `CurrentUserDep` 依赖自动完成 Token 提取、验证和数据库查询。如果到达函数体，说明用户合法。
+
+    Args:
+        current_user (CurrentUserDep): 经由依赖注入获取的已通过认证的当前用户。
+
+    Returns:
+        UserResponse: 当前用户的脱敏信息对象。
     """
+    # 利用 Pydantic 模型的 model_validate 方法将 ORM 对象转为响应字典，自动过滤掉密码等敏感字段
     return UserResponse.model_validate(current_user)
