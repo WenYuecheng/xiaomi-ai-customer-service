@@ -1,6 +1,6 @@
 """
 文件职责：
-封装了用户密码的哈希加密与校验，以及 JWT (JSON Web Token) 的签发与解析。
+该文件负责封装用户密码的哈希加密与校验，以及 JWT (JSON Web Token) 的签发与解析。
 
 所属功能：
 用户认证 -> 安全与凭证管理。
@@ -33,6 +33,15 @@ def hash_password(password: str) -> str:
 
     调用方：
     `app.auth.service.create_user` 等。
+
+    Args:
+        password (str): 用户输入的明文密码。
+
+    Returns:
+        str: 使用 bcrypt 加密后的哈希字符串。
+
+    Raises:
+        ValueError: 如果密码字节长度超过 72 字节（bcrypt 限制）。
     """
     raw = password.encode("utf-8")
     if len(raw) > 72:
@@ -50,6 +59,13 @@ def verify_password(password: str, password_hash: str) -> bool:
 
     调用方：
     `app.auth.service.authenticate`。
+
+    Args:
+        password (str): 用户输入的明文密码。
+        password_hash (str): 数据库中保存的哈希字符串。
+
+    Returns:
+        bool: 匹配返回 True，否则返回 False。
 
     异常：
     如果 bcrypt 校验遇到非法的输入，捕获异常并返回 False。
@@ -74,24 +90,38 @@ def create_access_token(
     生成符合 JWT 规范的登录令牌。
 
     流程位置：
-    在 `login` 路由密码验证成功后被调用。
+    在 `login` 或 `register` 成功后被调用。
 
-    参数：
-    - subject: 令牌主体，一般为用户 UUID，将作为后续请求的用户身份凭证。
-    - role: 用户角色，放入 payload 方便前端解析。
-    - settings: 全局配置，用于获取过期时间、密钥和签发者(iss)。
+    Args:
+        subject (str): 令牌主体，一般为用户 UUID，将作为后续请求的用户身份凭证。
+        role (str): 用户角色，放入 payload 方便前端解析。
+        settings (Settings): 全局配置，用于获取过期时间、密钥和签发者(iss)。
+        token_version (int): Token 的版本号，用于支持主动失效 Token（如修改密码后）。
+
+    Returns:
+        str: 生成的 JWT 字符串。
+
+    Raises:
+        RuntimeError: 当 JWT_SECRET 未配置或过短时抛出。
     """
     if not settings.jwt_secret or len(settings.jwt_secret) < 32:
         raise RuntimeError("JWT_SECRET must contain at least 32 characters")
+
+    # 获取当前的 UTC 时间，避免时区带来的歧义
     now = datetime.now(UTC)
+
+    # 构建 JWT Payload 载荷信息
     payload = {
         "sub": subject,
         "role": role,
-        "iat": now,
-        "exp": now + timedelta(minutes=settings.access_token_expire_minutes),
-        "iss": settings.app_name,
-        "ver": token_version,
+        "iat": now,  # 签发时间 (Issued At)
+        "exp": now
+        + timedelta(minutes=settings.access_token_expire_minutes),  # 过期时间 (Expiration Time)
+        "iss": settings.app_name,  # 签发者 (Issuer)
+        "ver": token_version,  # 自定义字段：Token 版本号
     }
+
+    # 采用配置的算法（通常是 HS256）对载荷进行签名
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
@@ -105,6 +135,16 @@ def decode_access_token(token: str, settings: Settings) -> dict:
 
     调用方：
     `app.auth.dependencies.get_current_user` 鉴权中间件。
+
+    Args:
+        token (str): 客户端传来的 JWT 字符串。
+        settings (Settings): 全局配置。
+
+    Returns:
+        dict: 解析成功后的 Payload 数据字典。
+
+    Raises:
+        AppError: 如果 Token 无效、过期或缺失必填字段，抛出 401 错误。
     """
     if not settings.jwt_secret:
         raise AppError(401, "invalid_token", "登录凭证无效")

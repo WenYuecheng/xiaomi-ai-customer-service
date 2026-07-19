@@ -1,1 +1,10 @@
-"""Conversation, grounded chat, feedback and streaming APIs."""
+"""
+文件职责：
+该文件负责导出当前 chat 模块下的所有公开组件，提供智能问答、流式传输、以及反馈管理的入口。
+
+所属功能：
+智能问答 -> 模块初始化。
+
+主要流程：
+声明当前目录为一个 Python Package，便于其他模块引用内部组件。
+"""

@@ -1,6 +1,16 @@
 # 测试报告
 
-执行日期：2026-07-18。
+执行日期：2026-07-18 至 2026-07-19。
+
+## 最终项目结构、README 与详细注释验收（2026-07-19）
+
+- 后端：56 项 pytest 全部通过，覆盖率 89%；65 个 Python 文件通过 Ruff 格式与静态检查。
+- 前端：14 个 Vitest 文件、28 项测试全部通过；Vue TypeScript 与 Vite 8 生产构建成功。
+- 注释语义：比较 `origin/main` 与详细注释提交中的 54 个 Python 文件，移除模块、类和函数文档字符串后，AST 语义差异为 0；聊天生成边界保持 `not prepared.requires_generation`。
+- Docker：前后端镜像重新构建成功；后端状态 healthy，前端 running，`/api/v1/health` 返回 `status=ok`。
+- 项目结构：5 份规划材料归档到 `docs/planning/`，3 张验收图片归档到 `docs/screenshots/`，Jira CSV 移至 `jira/`，4 份项目说明归档到 `docs/project/`；根目录只保留启动必需文件。
+- 文档事实：README 命令已与两个脚本的 `--help` 输出核对；本地 Markdown 链接缺失数为 0。文档记录 10 份基础样本、62 份正式资料、30 问基础集和 114 问扩展集。
+- 公开安全：已跟踪运行时产物数量为 0；未发现 `sk-` 密钥模式，`.env`、数据库、Chroma、上传文件、模型和缓存均未纳入 Git。
 
 ## 用户注册与动态个人主页验收
 

@@ -1,3 +1,14 @@
+"""
+文件职责：
+该文件负责定义AI产品选购顾问模块的所有RESTful API路由(HTTP endpoints)。
+
+所属功能：
+AI产品选购顾问模块的API层。
+
+主要流程：
+接收来自客户端的HTTP请求，处理鉴权与依赖注入，调用业务逻辑层(service.py)处理核心逻辑，并将结果封装后响应给客户端。
+"""
+
 import json
 from collections.abc import Iterable, Iterator
 
@@ -30,11 +41,30 @@ router = APIRouter(prefix="/advisor", tags=["AI advisor"])
 
 
 def encode_event(event: str, data: dict) -> bytes:
+    """
+    负责将事件数据编码为Server-Sent Events (SSE)格式。
+
+    Args:
+        event (str): 事件名称。
+        data (dict): 事件携带的数据载荷。
+
+    Returns:
+        bytes: 编码后的SSE格式字节流。
+    """
     payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     return f"event: {event}\ndata: {payload}\n\n".encode()
 
 
 def stream_events(events: Iterator[tuple[str, dict]]) -> Iterable[bytes]:
+    """
+    负责将生成的事件流持续转化为SSE字节流序列。
+
+    Args:
+        events (Iterator[tuple[str, dict]]): 生成(event, data)元组的迭代器。
+
+    Yields:
+        bytes: 编码后的SSE格式字节流。
+    """
     for event, data in events:
         yield encode_event(event, data)
 
@@ -46,6 +76,22 @@ def create_advisor_session(
     db: SessionDep,
     current_user: CurrentUserDep,
 ) -> AdvisorCreateResponse | StreamingResponse:
+    """
+    负责创建新的产品选购顾问会话。
+
+    Args:
+        request (Request): FastAPI的请求对象。
+        payload (AdvisorRequest): 客户端传入的创建会话请求载荷。
+        db (SessionDep): 数据库会话依赖。
+        current_user (CurrentUserDep): 当前已认证的用户对象。
+
+    Returns:
+        AdvisorCreateResponse | StreamingResponse:
+            如果不是流式请求，则返回同步处理完成的完整响应；如果是流式请求，则返回SSE事件流。
+
+    Raises:
+        AppError: 如果知识库不存在或敏感词校验未通过时抛出。
+    """
     validate_sensitive_input(db, request.app.state.settings, current_user, payload.message)
     item = create_session_record(
         db,
@@ -71,6 +117,16 @@ def create_advisor_session(
 
 @router.get("/sessions")
 def list_advisor_sessions(db: SessionDep, current_user: CurrentUserDep) -> AdvisorSessionList:
+    """
+    负责获取当前用户所有的选购会话摘要列表。
+
+    Args:
+        db (SessionDep): 数据库会话依赖。
+        current_user (CurrentUserDep): 当前已认证的用户对象。
+
+    Returns:
+        AdvisorSessionList: 包含会话摘要列表及总数的响应对象。
+    """
     items = list_session_summaries(db, current_user)
     return AdvisorSessionList(items=items, total=len(items))
 
@@ -81,6 +137,20 @@ def get_advisor_session(
     db: SessionDep,
     current_user: CurrentUserDep,
 ) -> AdvisorSessionResponse:
+    """
+    负责获取指定选购会话的详情及所有对话记录。
+
+    Args:
+        session_id (str): 会话ID。
+        db (SessionDep): 数据库会话依赖。
+        current_user (CurrentUserDep): 当前已认证的用户对象。
+
+    Returns:
+        AdvisorSessionResponse: 包含该会话完整对话轮次数据的详情。
+
+    Raises:
+        AppError: 如果会话不存在或者不属于当前用户时抛出。
+    """
     return full_session_response(get_owned_session(db, session_id, current_user))
 
 
@@ -92,6 +162,23 @@ def create_advisor_follow_up(
     db: SessionDep,
     current_user: CurrentUserDep,
 ) -> AdvisorTurnResponse | StreamingResponse:
+    """
+    负责处理用户在已有选购会话中的追问或后续补充需求。
+
+    Args:
+        session_id (str): 会话ID。
+        request (Request): FastAPI的请求对象。
+        payload (AdvisorFollowUpRequest): 客户端传入的追问请求载荷。
+        db (SessionDep): 数据库会话依赖。
+        current_user (CurrentUserDep): 当前已认证的用户对象。
+
+    Returns:
+        AdvisorTurnResponse | StreamingResponse:
+            非流式则返回单轮对话结果；流式则返回SSE事件流。
+
+    Raises:
+        AppError: 如果会话不存在、不属于当前用户或敏感词校验未通过时抛出。
+    """
     validate_sensitive_input(db, request.app.state.settings, current_user, payload.message)
     item = get_owned_session(db, session_id, current_user)
     overrides = payload.model_dump(exclude={"message", "stream"})
@@ -116,6 +203,20 @@ def delete_advisor_session(
     db: SessionDep,
     current_user: CurrentUserDep,
 ) -> Response:
+    """
+    负责删除指定的选购会话。
+
+    Args:
+        session_id (str): 会话ID。
+        db (SessionDep): 数据库会话依赖。
+        current_user (CurrentUserDep): 当前已认证的用户对象。
+
+    Returns:
+        Response: 删除成功返回204状态码。
+
+    Raises:
+        AppError: 如果会话不存在或者不属于当前用户时抛出。
+    """
     item = get_owned_session(db, session_id, current_user)
     db.delete(item)
     db.commit()

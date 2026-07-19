@@ -31,6 +31,7 @@ from app.db.base import Base
 
 
 def utcnow() -> datetime:
+    """获取当前时区感知的 UTC 时间，用于设置默认的创建与更新时间。"""
     return datetime.now(UTC)
 
 
@@ -106,6 +107,8 @@ class KnowledgeBase(Base):
 
 
 class JobStatus(StrEnum):
+    """文档处理任务状态枚举"""
+
     queued = "queued"
     running = "running"
     succeeded = "succeeded"
@@ -114,6 +117,8 @@ class JobStatus(StrEnum):
 
 
 class DocumentStatus(StrEnum):
+    """文档状态枚举"""
+
     queued = "queued"
     processing = "processing"
     ready = "ready"
@@ -121,6 +126,12 @@ class DocumentStatus(StrEnum):
 
 
 class Document(Base):
+    """
+    数据模型：文档表 (documents)
+    业务含义：表示上传到知识库的一份原始文档资源。
+    生命周期：创建(queued) -> 处理中(processing) -> 就绪(ready) 或 失败(failed)。
+    """
+
     __tablename__ = "documents"
     __table_args__ = (
         UniqueConstraint("knowledge_base_id", "sha256", name="uq_document_kb_sha256"),
@@ -132,6 +143,7 @@ class Document(Base):
     stored_filename: Mapped[str] = mapped_column(String(255), unique=True)
     media_type: Mapped[str] = mapped_column(String(100))
     size_bytes: Mapped[int] = mapped_column(Integer)
+    # 通过文件散列值防止同一知识库内重复上传相同文件
     sha256: Mapped[str] = mapped_column(String(64), index=True)
     status: Mapped[DocumentStatus] = mapped_column(
         Enum(DocumentStatus), default=DocumentStatus.queued, index=True
@@ -155,14 +167,21 @@ class Document(Base):
 
 
 class DocumentChunk(Base):
+    """
+    数据模型：文档块 (document_chunks)
+    业务含义：将原始文档拆分后，供向量数据库检索的文本片段。
+    """
+
     __tablename__ = "document_chunks"
     __table_args__ = (UniqueConstraint("document_id", "ordinal", name="uq_chunk_ordinal"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     document_id: Mapped[str] = mapped_column(ForeignKey("documents.id"), index=True)
     knowledge_base_id: Mapped[str] = mapped_column(ForeignKey("knowledge_bases.id"), index=True)
+    # 块在原文档中的排序号
     ordinal: Mapped[int] = mapped_column(Integer)
     text: Mapped[str] = mapped_column(Text)
+    # 该块的物理位置信息（例如页码等）
     location: Mapped[str] = mapped_column(String(200))
     product_models: Mapped[list[str]] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -171,6 +190,11 @@ class DocumentChunk(Base):
 
 
 class ProcessingJob(Base):
+    """
+    数据模型：文档处理任务表 (processing_jobs)
+    业务含义：用于异步跟踪文档向量化及分块等耗时任务的状态与重试。
+    """
+
     __tablename__ = "processing_jobs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -188,11 +212,18 @@ class ProcessingJob(Base):
 
 
 class MessageRole(StrEnum):
+    """消息角色：用户(user)或助手(assistant)"""
+
     user = "user"
     assistant = "assistant"
 
 
 class Conversation(Base):
+    """
+    数据模型：会话表 (conversations)
+    业务含义：用户与机器人之间的一次连贯的对话流程记录。
+    """
+
     __tablename__ = "conversations"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -200,6 +231,7 @@ class Conversation(Base):
     knowledge_base_id: Mapped[str] = mapped_column(ForeignKey("knowledge_bases.id"), index=True)
     summary: Mapped[str | None] = mapped_column(Text)
     summary_message_count: Mapped[int] = mapped_column(Integer, default=0)
+    # 连续降级（未能匹配到有效信息而回退）的次数
     consecutive_fallbacks: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -212,6 +244,11 @@ class Conversation(Base):
 
 
 class Message(Base):
+    """
+    数据模型：消息表 (messages)
+    业务含义：一次会话中的单条消息实体。
+    """
+
     __tablename__ = "messages"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -219,8 +256,11 @@ class Message(Base):
     role: Mapped[MessageRole] = mapped_column(Enum(MessageRole))
     content: Mapped[str] = mapped_column(Text)
     run_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    # 意图识别结果，例如"询问订单"、"查询保修"
     intent: Mapped[str | None] = mapped_column(String(30))
+    # 是否是兜底回复（即 AI 没有足够的业务信息）
     fallback: Mapped[bool] = mapped_column(Boolean, default=False)
+    # 接口响应耗时
     latency_ms: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -231,6 +271,11 @@ class Message(Base):
 
 
 class MessageSource(Base):
+    """
+    数据模型：消息参考来源表 (message_sources)
+    业务含义：记录 AI 助手在回答时具体引用了哪些知识库文档片段及其相似度得分。
+    """
+
     __tablename__ = "message_sources"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -247,15 +292,23 @@ class MessageSource(Base):
 
     @property
     def source_url(self) -> str | None:
+        """获取原始文档的引用链接。"""
         return self.document.source_url
 
 
 class FeedbackRating(StrEnum):
+    """点赞或踩"""
+
     up = "up"
     down = "down"
 
 
 class Feedback(Base):
+    """
+    数据模型：反馈表 (feedback)
+    业务含义：用户对 AI 回复的点赞或点踩记录及纠错建议。
+    """
+
     __tablename__ = "feedback"
     __table_args__ = (UniqueConstraint("message_id", "user_id", name="uq_feedback_user_message"),)
 
@@ -271,6 +324,11 @@ class Feedback(Base):
 
 
 class BehaviorEvent(Base):
+    """
+    数据模型：用户行为事件表 (behavior_events)
+    业务含义：记录用户的操作日志以作统计与模型优化使用。
+    """
+
     __tablename__ = "behavior_events"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -283,6 +341,11 @@ class BehaviorEvent(Base):
 
 
 class MockOrder(Base):
+    """
+    数据模型：模拟订单表 (mock_orders)
+    业务含义：用于给客服提供测试用户的订单状态数据查询。
+    """
+
     __tablename__ = "mock_orders"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -296,6 +359,11 @@ class MockOrder(Base):
 
 
 class Ticket(Base):
+    """
+    数据模型：工单表 (tickets)
+    业务含义：当 AI 无法解决用户问题时，升级为人工工单处理。
+    """
+
     __tablename__ = "tickets"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -311,6 +379,11 @@ class Ticket(Base):
 
 
 class RecommendationTrainingRun(Base):
+    """
+    数据模型：推荐模型训练记录 (recommendation_training_runs)
+    业务含义：记录推荐系统训练任务的状态及指标评估。
+    """
+
     __tablename__ = "recommendation_training_runs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -325,6 +398,11 @@ class RecommendationTrainingRun(Base):
 
 
 class AdvisorSession(Base):
+    """
+    数据模型：智能顾问会话 (advisor_sessions)
+    业务含义：管理高级顾问业务流程（可能是针对特定产品的深层次指导）的对话框实例。
+    """
+
     __tablename__ = "advisor_sessions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -345,6 +423,11 @@ class AdvisorSession(Base):
 
 
 class AdvisorTurn(Base):
+    """
+    数据模型：智能顾问会话回合 (advisor_turns)
+    业务含义：记录顾问模式下每次用户提问以及 AI 决策过程的结构化输出（计划、来源、轨迹）。
+    """
+
     __tablename__ = "advisor_turns"
     __table_args__ = (
         UniqueConstraint("session_id", "sequence_no", name="uq_advisor_turn_sequence"),
@@ -355,9 +438,13 @@ class AdvisorTurn(Base):
     message_id: Mapped[str | None] = mapped_column(ForeignKey("messages.id"), index=True)
     sequence_no: Mapped[int] = mapped_column(Integer)
     question: Mapped[str] = mapped_column(Text)
+    # AI 提取的用户需求
     requirements: Mapped[dict] = mapped_column(JSON, default=dict)
+    # AI 规划的解决步骤
     plan: Mapped[dict] = mapped_column(JSON, default=dict)
+    # 引用的资料
     sources: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    # 思考链路追溯
     ai_trace: Mapped[list[dict]] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(String(20), default="completed", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

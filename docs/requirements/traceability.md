@@ -1,6 +1,7 @@
 # 需求追踪说明
 
-实施期间以 `小米智能客服机器人_Jira_Epic_Stories导入表.csv` 的 32 条 Story 为主键，测试使用 `EPxx-序号` 标记。额外需求使用以下编号：
+实施期间以 `jira/Jira_Epic_Stories导入表.csv` 的 32 条 Story 为主键，测试使用
+`EPxx-序号` 标记。额外需求使用以下编号：
 
 - EXT-01：文档语义预处理
 - EXT-02：用户画像
@@ -41,9 +42,12 @@
 | EP05-04 密钥配置 | Settings/`.env.example` | 敏感信息扫描 |
 | EP05-05 敏感输入 | 长度、文件、敏感词与审计 | blocked input 测试 |
 | EP06-01 标准回归集 | `questions.csv`、评测脚本 | 30/30，100% |
-| EP06-02 核心测试 | pytest/Vitest | 后端 41、前端 15，覆盖率 88% |
+| EP06-02 核心测试 | pytest/Vitest | 后端 56、前端 28，覆盖率 89% |
 | EP06-03 Compose MVP | 两个 Dockerfile、Compose | 前后端镜像构建通过，后端 healthy、前端 running |
 | EP06-04 README/API | README、Swagger、数据库文档 | 本地端到端启动验证 |
 | EP06-05 Jira 归档 | `jira/README.md`、本矩阵 | 单人真实证据流程 |
 
-扩展项：EXT-01 语义清洗与型号提取；EXT-02 画像；EXT-03 时间衰减热词；EXT-04 滚动摘要；EXT-05 混合推荐；EXT-06 TruncatedSVD 离线训练与 Precision/Recall@K，均由 `test_operations.py` 覆盖。
+扩展项：EXT-01 语义清洗与型号提取；EXT-02 画像；EXT-03 时间衰减热词；
+EXT-04 滚动摘要；EXT-05 混合推荐；EXT-06 TruncatedSVD 离线训练与
+Precision/Recall@K，均由 `test_operations.py` 覆盖。公开注册、动态个人主页和 AI 选购
+分别由 `test_account.py`、账户组件测试和 `test_advisor.py` 覆盖。

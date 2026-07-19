@@ -6,6 +6,11 @@
 
 所属功能：
 智能问答 -> 核心业务流水线编排。
+
+主要流程：
+处理提问 -> (长会话压缩) -> AI 分析意图 -> 混合检索 -> (可选)结果重排
+-> 组装上下文 -> AI 流式/非流式生成回答。
+支持普通聊天、查订单、选购顾问等多样化业务意图分流。
 """
 
 from collections.abc import Callable, Iterator
@@ -56,6 +61,9 @@ class PreparedChat:
     """
     内部数据载体：
     在整个分析、检索和流式生成的生命周期中，用于跨函数传递上下文状态，避免函数参数列表过长。
+
+    职责：聚合一次问答请求的所有中间状态。
+    生命周期：在 initialize_stream_chat 或 prepare_chat 时创建，贯穿整个问答流程直至生成结束。
     """
 
     user: User
@@ -80,6 +88,16 @@ class PreparedChat:
 
 
 def classify_intent(text: str) -> str:
+    """
+    基于关键字对用户输入进行初步的确定性意图分类。
+
+    Args:
+        text: 用户的提问文本。
+
+    Returns:
+        str: 识别出的意图字符串，未匹配特定关键字时默认返回 "knowledge_query"。
+    """
+    # 优先匹配转人工、订单和常见寒暄，否则走知识检索
     if any(keyword in text for keyword in ("转人工", "人工客服", "人工处理")):
         return "human_transfer"
     if any(keyword in text for keyword in ("订单", "物流", "快递", "发货")):
@@ -90,7 +108,17 @@ def classify_intent(text: str) -> str:
 
 
 def rewrite_question(question: str, conversation: Conversation) -> str:
-    """Resolve a small, deterministic set of follow-up references for retrieval."""
+    """
+    解析并重写用户提问，处理少量确定性的上下文指代关系（如“它”、“这个”）。
+
+    Args:
+        question: 当前的提问。
+        conversation: 当前所属的会话（用于获取历史消息）。
+
+    Returns:
+        str: 重写后的问题。若包含指代词，则将上一轮提问拼接在前面。
+    """
+    # 查找是否有明确的指代词标记
     references_previous = any(
         marker in question for marker in ("它", "这个", "该型号", "那款", "Pro 版", "标准版")
     )
@@ -103,6 +131,17 @@ def rewrite_question(question: str, conversation: Conversation) -> str:
 
 
 def answer_business_intent(session: Session, user: User, intent: str) -> tuple[str, bool]:
+    """
+    处理除知识问答之外的特殊业务意图。
+
+    Args:
+        session: 数据库会话。
+        user: 发起提问的用户。
+        intent: 已被识别的业务意图。
+
+    Returns:
+        tuple[str, bool]: (给用户的回复文本, 是否发生了回退 fallback)
+    """
     if intent == "general_chat":
         return "你好，我可以解答产品问题、查询演示订单，或协助转人工。", False
     if intent == "human_transfer":
@@ -142,6 +181,15 @@ def fallback_analysis(question: str, conversation: Conversation) -> QuestionAnal
 
 
 def upsert_trace(prepared: PreparedChat, step: AiTraceStep) -> None:
+    """
+    更新或插入一条 AI 执行轨迹记录。
+
+    保证同一个阶段（stage）只有一个轨迹步骤，如果有新的更新则覆盖旧的。
+
+    Args:
+        prepared: 包含 ai_trace 的上下文载体。
+        step: 新的轨迹步骤对象。
+    """
     for index, current in enumerate(prepared.ai_trace):
         if current.stage == step.stage:
             prepared.ai_trace[index] = step
@@ -160,6 +208,21 @@ def persist_trace(session: Session, prepared: PreparedChat) -> None:
 def get_or_create_conversation(
     session: Session, user: User, knowledge_base_id: str, conversation_id: str | None
 ) -> Conversation:
+    """
+    获取现有会话或创建新的会话。
+
+    Args:
+        session: 数据库会话。
+        user: 当前用户。
+        knowledge_base_id: 知识库 ID。
+        conversation_id: 传入的会话 ID，若无则新建。
+
+    Raises:
+        AppError: 知识库不存在、会话不存在或知识库 ID 不匹配。
+
+    Returns:
+        Conversation: 获取到或新创建的对话实体。
+    """
     if not session.get(KnowledgeBase, knowledge_base_id):
         raise AppError(404, "knowledge_base_not_found", "知识库不存在")
     if conversation_id:
@@ -205,6 +268,17 @@ def initialize_stream_chat(
     1. 敏感词拦截（硬规则）。
     2. 获取或创建会话 `Conversation`，将用户发出的 `Message` 入库。
     3. 构建好最初步的 `PreparedChat` 上下文结构返回，为后续流式输出做准备。
+
+    Args:
+        session: 数据库会话。
+        settings: 系统配置。
+        user: 当前用户。
+        knowledge_base_id: 关联知识库。
+        question: 用户提问。
+        conversation_id: 关联会话。
+
+    Returns:
+        PreparedChat: 已初始化好并入库初始消息的上下文对象。
     """
     started = perf_counter()
     matched_sensitive_words = [word for word in settings.sensitive_words if word in question]
@@ -295,6 +369,15 @@ def stream_preparation_steps(
     通过 Python `yield` 逐步执行并对外吐出当前的工作状态 (Trace)。
     执行链：意图理解 -> 混合检索 -> (可选)结果重排序。
     如果命中业务意图 (如转人工、查订单)，会直接终止并设置好 fallback 返回值，跳过后续生成。
+
+    Args:
+        session: 数据库会话。
+        settings: 系统配置。
+        vector_store: 向量检索引擎服务。
+        prepared: 包含中间状态的上下文。
+
+    Yields:
+        AiTraceStep: 在准备的不同阶段向前端抛出的轨迹跟踪事件。
     """
     engine, model = model_identity(settings)
     running = AiTraceStep(
@@ -769,7 +852,17 @@ def stream_prepared_chat(
     流式问答的第三步：调用大模型进行真正的文字生成。
     通过迭代器 `yield` 一个个 Token，并将结果组装最终落库保存。
     支持客户端中途取消生成 (通过 `is_cancelled` 标志检查)。
+
+    Args:
+        session: 数据库会话。
+        settings: 系统配置。
+        prepared: 已完成检索与意图分析的上下文对象。
+        is_cancelled: 用于检测请求是否已被中断的回调函数。
+
+    Yields:
+        str: 模型生成的文本片段。
     """
+    # 1. 若无需生成（如直接使用内置 fallback 或业务回复），直接把现有结果按流模拟输出
     if not prepared.requires_generation:
         for index in range(0, len(prepared.message.content), 12):
             if is_cancelled():

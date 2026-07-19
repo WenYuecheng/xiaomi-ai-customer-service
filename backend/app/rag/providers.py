@@ -4,6 +4,11 @@
 
 所属功能：
 RAG 引擎 -> LLM 驱动层。
+
+主要流程：
+1. 声明 `ChatProvider` 协议，规范必需提供的方法签名。
+2. 实现 `MockChatProvider` 用于本地免模型调试。
+3. 实现 `LangChainChatProvider` 作为生产级实现，包装了结构化输出和流式机制。
 """
 
 import json
@@ -164,11 +169,18 @@ class RerankResult(BaseModel):
 
 class ChatProvider(Protocol):
     """
-    接口定义：规范大语言模型必须提供的 4 项核心能力。
+    接口定义：规范大语言模型必须提供的核心能力。
+
+    主要职责：
+    作为面向接口编程的契约，使得上层业务（如 chatbot router）无需关心底层
+    使用的是 OpenAI 还是本地部署的 Ollama，即可进行大模型调用。
+
+    提供能力：
     1. analyze: 分析用户意图及指代消解
     2. rerank: 根据上下文对召回切片进行二次重排
-    3. generate: 基于知识库一揽子生成回答
-    4. stream: 生成并在通道流式返回打字机效果
+    3. generate: 基于知识库进行一次性长文本生成
+    4. generate_advisor: 智能导购与产品对比方案的生成
+    5. stream: 与 generate 类似，但提供打字机效果的流式返回
     """
 
     def analyze(
@@ -362,8 +374,11 @@ class MockChatProvider:
 
 class LangChainChatProvider:
     """
-    生产级 LLM 提供者适配。
-    通过 Langchain 的 `with_structured_output` 提供具有强类型约束的意图分析与重排。
+    生产级 LLM 提供者适配器。
+
+    主要职责：
+    将应用内的业务请求（如意图识别、智能选购）转换并委派给底层的 Langchain Model，
+    并通过 Langchain 的 `with_structured_output` 提供具有强类型约束的 JSON 输出保障。
     """
 
     def __init__(self, model) -> None:
@@ -490,6 +505,22 @@ class LangChainChatProvider:
 
 
 def create_chat_provider(settings: Settings) -> ChatProvider:
+    """
+    工厂函数：根据系统配置实例化大语言模型提供者。
+
+    主要职责：
+    隔离模型实例化逻辑（如 API Key 注入、Base URL 设定、重试机制）。
+    支持三种工作模式：Mock 测试、OpenAI 兼容接口、Ollama 本地接口。
+
+    Args:
+        settings: 系统全局环境配置。
+
+    Returns:
+        实现了 `ChatProvider` 协议的模型封装实例。
+
+    Raises:
+        RuntimeError: 当选用 openai 模式却缺失关键配置时抛出。
+    """
     if settings.llm_provider == "mock":
         return MockChatProvider()
     if settings.llm_provider == "openai":

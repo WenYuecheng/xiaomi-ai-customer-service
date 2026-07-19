@@ -5,6 +5,10 @@
 
 所属功能：
 运营分析与推荐 -> 推荐引擎核心。
+
+主要流程：
+1. `recommend`: 提供给前台接口，融合局部偏好和全局热度。
+2. `train_recommender`: 离线定时或手动触发执行矩阵分解模型的训练、评估、版本化及产物打包。
 """
 
 import hashlib
@@ -33,14 +37,24 @@ class TrainingOutcome:
 
 def recommend(session: Session, user_id: str, knowledge_base_id: str) -> RecommendationList:
     """
-    实时推荐算法（基于规则的多路召回加权）：
+    实时推荐算法（基于规则的多路召回加权）。
 
-    推荐得分 = 60% 用户自身历史偏好打分 + 25% 平台全局热门商品打分 + 15% 内容固有权重
+    主要职责：
+    利用公式：推荐得分 = 60% 用户自身历史偏好打分 + 25% 平台全局热门商品打分 + 15% 内容固有权重。
 
-    1. 提取当前用户问过的商品。
-    2. 提取全局用户问过的商品。
+    执行链：
+    1. 提取当前用户问过的商品（偏好特征）。
+    2. 提取全局用户问过的商品（热度特征）。
     3. 为知识库中存在的所有产品进行上述加权打分，并排序输出前 10 个。
     4. 若用户完全无历史，属于冷启动 (`cold_start`)，则完全依赖全局热度。
+
+    Args:
+        session: 数据库会话。
+        user_id: 正在获取推荐的用户 UUID。
+        knowledge_base_id: 当前约束范围的知识库 ID。
+
+    Returns:
+        包含前 10 推荐商品及是否触发冷启动标志的结果。
     """
     chunks = list(
         session.scalars(
@@ -82,6 +96,7 @@ def train_recommender(session: Session, artifact_dir, target: str = "balanced") 
     """
     离线训练机制：基于用户-物品交互矩阵的 SVD (奇异值分解) 协同过滤模型训练。
 
+    执行链：
     1. 搜集数据库中用户对话里提到的产品作为交互行为。
     2. 当有效用户和有效产品较少时，降级使用内置的静态
        `clearly-labelled-demo-interactions` 演示矩阵。
@@ -90,7 +105,15 @@ def train_recommender(session: Session, artifact_dir, target: str = "balanced") 
        点击物品作为预测基准，其余作为训练数据。
     5. 利用 Scikit-Learn 的 `TruncatedSVD` 进行降维和特征提取。
     6. 计算并输出 `Precision@K` 和 `Recall@K`。
-    7. 将训练出的矩阵权重作为产物 (Artifact) 持久化成 JSON 文件保存。
+    7. 将训练出的矩阵权重作为产物 (Artifact) 持久化成 JSON 文件保存，同时入库历史。
+
+    Args:
+        session: 数据库会话。
+        artifact_dir: 训练结果文件的持久化存储目录。
+        target: 训练评估倾向 ("balanced" | "precision" | "recall")。
+
+    Returns:
+        TrainingOutcome 结构，包含当次运行记录、产生的元数据和是否发生真正更新的标志。
     """
     user_preferences: dict[str, Counter[str]] = {}
     for event in session.scalars(select(BehaviorEvent).where(BehaviorEvent.event_type == "chat")):
