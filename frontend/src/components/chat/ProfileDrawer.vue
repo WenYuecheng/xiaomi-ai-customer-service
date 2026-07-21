@@ -40,3 +40,6 @@ const feedbackTotal = computed(() => helpful.value + improve.value)
 @keyframes chip-in { from { opacity: 0; transform: translateY(5px); } }
 @media (prefers-reduced-motion: reduce) { .preference-list span { animation: none; } }
 </style>
+<style scoped>
+.profile-content section{border-color:var(--line);border-radius:14px}.profile-hero{background:#fff3e9!important;border-color:#ffd5b7;color:var(--ink)}.preference-list span{background:#fff3e9;border-color:#ffd5b7;color:#b34a08}.bar i{background:var(--mi-orange)}.profile-drawer :deep(.el-drawer__body){background:#fbfaf8}
+</style>

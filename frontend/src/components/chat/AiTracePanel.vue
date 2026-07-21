@@ -67,3 +67,6 @@ const statusLabels: Record<AiTraceStep['status'], string> = {
 @keyframes trace-pulse { 50% { box-shadow: 0 0 0 6px rgba(224,91,168,.12); transform: scale(.78); } }
 @media (prefers-reduced-motion: reduce) { .is-running .ai-trace__node { animation: none; } }
 </style>
+<style scoped>
+.ai-trace__spark{background:#fff2e8;border:1px solid #ffd7ba;color:var(--mi-orange)}.ai-trace__count{color:var(--mi-orange)}
+</style>

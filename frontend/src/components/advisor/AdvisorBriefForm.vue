@@ -66,7 +66,7 @@ function submit(): void {
 
 <template>
   <form class="brief-console" @submit.prevent="submit">
-    <div class="console-top"><span>01 / SELECT DOMAIN</span><b>告诉 AI 你在选什么</b></div>
+    <div class="console-top"><span>PURCHASE BRIEF / 选购需求单</span><b>信息越具体，推荐越可靠</b></div>
     <div class="category-grid">
       <button v-for="item in categories" :key="item.value" type="button" :class="{ selected: form.category === item.value }" @click="form.category = item.value">
         <i>{{ item.icon }}</i><strong>{{ item.label }}</strong><small>{{ item.copy }}</small>
@@ -81,7 +81,7 @@ function submit(): void {
     </div>
     <div class="priority-section"><span>最关注什么</span><div><button v-for="item in priorities" :key="item.value" type="button" :class="{ selected: form.priorities.includes(item.value) }" @click="togglePriority(item.value)">{{ item.label }}</button></div></div>
     <label class="question-field"><span>补充你的使用场景</span><el-input v-model="form.message" type="textarea" :rows="3" maxlength="4000" show-word-limit /></label>
-    <button class="launch-button" type="submit" :disabled="busy || !form.knowledge_base_id"><span>{{ busy ? 'AI 正在执行三段分析…' : '启动 3 次 DeepSeek 智能选购' }}</span><i>→</i></button>
+    <button class="launch-button" type="submit" :disabled="busy || !form.knowledge_base_id"><span>{{ busy ? '正在检索证据并生成方案…' : '生成有依据的选购方案' }}</span><i>→</i></button>
   </form>
 </template>
 
@@ -91,4 +91,8 @@ function submit(): void {
 .field-grid { display: grid; gap: 11px; grid-template-columns: 1fr 1fr; margin-top: 16px; }.field-grid label,.question-field { display: grid; gap: 6px; }.field-grid label>span,.question-field>span,.priority-section>span { color: #a99db9; font-size: 10px; }.model-field { grid-column: 1/-1; }.brief-console :deep(.el-input__wrapper),.brief-console :deep(.el-select__wrapper),.brief-console :deep(.el-textarea__inner) { background: #282039; box-shadow: 0 0 0 1px #463a5d inset; color: white; }.brief-console :deep(input),.brief-console :deep(textarea) { color: #f5f1fb; }.brief-console :deep(.el-input-number) { width: 100%; }
 .priority-section { margin: 16px 0; }.priority-section>div { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 7px; }.priority-section button { background: #29213b; border: 1px solid #44375a; border-radius: 999px; color: #bfb3cf; cursor: pointer; padding: 7px 12px; }.priority-section button.selected { background: #eee8ff; border-color: #eee8ff; color: #5638b5; }.launch-button { align-items: center; background: linear-gradient(90deg,#ff6900,#f24f9c,#7958ed); border: 0; border-radius: 15px; color: white; cursor: pointer; display: flex; font-weight: 720; justify-content: space-between; margin-top: 15px; padding: 14px 17px; width: 100%; }.launch-button i { font-size: 20px; font-style: normal; }.launch-button:disabled { cursor: wait; filter: grayscale(.45); opacity: .7; }
 @media (max-width: 700px) { .category-grid { grid-template-columns: 1fr 1fr; }.field-grid { grid-template-columns: 1fr; }.model-field { grid-column: auto; } }
+.brief-console{background:#1d1c1a;border-color:#34322f;border-radius:20px;box-shadow:0 24px 60px rgba(30,27,24,.16)}.console-top span{color:#ff9a57}.console-top b{color:#b9b5b0}.category-grid button{background:#292825;border-color:#3c3a37;color:#cbc7c1}.category-grid button.selected{background:#fff;border-color:#fff;box-shadow:0 10px 28px rgba(0,0,0,.22);color:#1d1c1a}.category-grid i{color:#ff9a57}.brief-console :deep(.el-input__wrapper),.brief-console :deep(.el-select__wrapper),.brief-console :deep(.el-textarea__inner){background:#292825;box-shadow:0 0 0 1px #45423e inset!important}.priority-section button{background:#292825;border-color:#45423e;color:#bbb7b1}.priority-section button.selected{background:#fff1e6;border-color:#ffb37d;color:#c65308}.launch-button{background:var(--mi-orange)}.launch-button:hover{background:var(--mi-orange-deep)}
+</style>
+<style scoped>
+.brief-console{background:#fff;border-color:var(--line);box-shadow:var(--shadow-sm);color:var(--ink)}.console-top span{color:var(--mi-orange)}.console-top b{color:var(--ink-muted)}.category-grid button{background:#faf9f7;border-color:var(--line);color:var(--ink-soft)}.category-grid button.selected{background:#fff5ed;border-color:#ffcba5;box-shadow:none;color:#b94e08}.category-grid i{color:var(--mi-orange)}.field-grid label>span,.question-field>span,.priority-section>span{color:var(--ink-muted)}.brief-console :deep(.el-input__wrapper),.brief-console :deep(.el-select__wrapper),.brief-console :deep(.el-textarea__inner){background:#fff;box-shadow:0 0 0 1px var(--line) inset!important}.brief-console :deep(input),.brief-console :deep(textarea){color:var(--ink)}.priority-section button{background:#faf9f7;border-color:var(--line);color:var(--ink-soft)}.priority-section button.selected{background:#fff3e9;border-color:#ffcba5;color:#b94e08}.launch-button{box-shadow:none}
 </style>

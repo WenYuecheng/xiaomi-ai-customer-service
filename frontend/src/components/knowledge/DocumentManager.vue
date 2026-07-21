@@ -114,18 +114,18 @@ onBeforeUnmount(() => window.clearInterval(poller))
 </script>
 
 <template>
-  <el-card shadow="never">
-    <template #header><div class="card-header"><strong>文档与处理任务</strong><el-button @click="load">刷新</el-button></div></template>
+  <el-card shadow="never" class="document-card">
+    <template #header><div class="card-header"><div><span>INGESTION PIPELINE</span><strong>文档入库与处理任务</strong><small>上传后自动完成安全校验、文本清洗、语义切分和向量生成</small></div><el-button @click="load">刷新状态</el-button></div></template>
     <div class="upload-grid">
-      <el-select v-model="selected" placeholder="选择知识库"><el-option v-for="item in knowledgeBases" :key="item.id" :label="item.name" :value="item.id" /></el-select>
-      <el-input-number v-model="config.chunk_size" :min="200" :max="4000" :step="100" controls-position="right" />
-      <el-input-number v-model="config.chunk_overlap" :min="0" :max="800" :step="20" controls-position="right" />
-      <el-input v-model="config.source_url" placeholder="公开来源 URL（可选）" />
+      <label><span>目标知识库</span><el-select v-model="selected" placeholder="选择知识库"><el-option v-for="item in knowledgeBases" :key="item.id" :label="item.name" :value="item.id" /></el-select></label>
+      <label><span>切片长度</span><el-input-number v-model="config.chunk_size" :min="200" :max="4000" :step="100" controls-position="right" /></label>
+      <label><span>重叠字符</span><el-input-number v-model="config.chunk_overlap" :min="0" :max="800" :step="20" controls-position="right" /></label>
+      <label><span>公开来源</span><el-input v-model="config.source_url" placeholder="https://www.mi.com/…" /></label>
     </div>
     <div class="upload-dropzone" :class="{ 'is-dragover': isDragover, 'is-disabled': busy || !selected }" @dragover.prevent="isDragover = true" @dragleave.prevent="isDragover = false" @drop.prevent="handleDrop" @click="triggerFileSelect">
       <el-icon class="upload-icon"><UploadFilled /></el-icon>
       <div class="upload-text">将文件拖到此处，或 <em>点击上传</em></div>
-      <div class="upload-hint">支持 .pdf, .docx, .txt, .md 格式</div>
+      <div class="upload-hint">支持 PDF、DOCX、TXT、Markdown · 单文件最大 10 MB · 可多选</div>
       <input ref="fileInput" class="hidden-input" type="file" multiple accept=".pdf,.docx,.txt,.md" :disabled="busy || !selected" @change="uploadFiles" />
     </div>
     <div v-for="(progress, name) in uploadProgress" :key="name" class="progress-row"><span>{{ name }}</span><el-progress :percentage="progress" /></div>
@@ -147,16 +147,12 @@ onBeforeUnmount(() => window.clearInterval(poller))
 </template>
 
 <style scoped>
-.card-header { align-items: center; display: flex; justify-content: space-between; }
-.upload-grid { display: grid; gap: 10px; grid-template-columns: 1fr 150px 150px 1.2fr; }
-.upload-dropzone { background: rgba(255,255,255,.6); border: 2px dashed #d1c8eb; border-radius: 14px; cursor: pointer; margin: 16px 0; padding: 32px; text-align: center; transition: all .2s ease; }
-.upload-dropzone:hover { border-color: #8c71ec; background: rgba(246,244,255,.8); }
+.document-card{border-radius:20px!important}.card-header{align-items:center;display:flex;justify-content:space-between}.card-header>div>span,.card-header strong,.card-header small{display:block}.card-header>div>span{color:var(--mi-orange);font-family:var(--font-mono);font-size:9px;font-weight:700;letter-spacing:.14em}.card-header strong{font-size:18px;margin:4px 0}.card-header small{color:var(--ink-muted);font-size:10px}.upload-grid{display:grid;gap:10px;grid-template-columns:1fr 150px 150px 1.2fr}.upload-grid label{display:grid;gap:5px}.upload-grid label>span{color:var(--ink-muted);font-size:10px;font-weight:650}.upload-grid :deep(.el-input-number){width:100%}.upload-dropzone{background:#faf9f7;border:2px dashed #d8d3cc;border-radius:16px;cursor:pointer;margin:16px 0;padding:34px;text-align:center;transition:all .2s ease}.upload-dropzone:hover{background:#fff8f2;border-color:var(--mi-orange)}
 .upload-dropzone.is-dragover { border-color: var(--mi-orange); background: #fff8f3; }
 .upload-dropzone.is-disabled { cursor: not-allowed; opacity: .6; pointer-events: none; }
-.upload-icon { color: #a497c8; font-size: 38px; margin-bottom: 8px; transition: color .2s; }
-.upload-dropzone:hover .upload-icon { color: #8c71ec; }
+.upload-icon{color:#aaa59e;font-size:38px;margin-bottom:8px;transition:color .2s}.upload-dropzone:hover .upload-icon{color:var(--mi-orange)}
 .upload-text { color: var(--ink); font-size: 15px; margin-bottom: 4px; }
-.upload-text em { color: #7658e4; font-style: normal; font-weight: 600; }
+.upload-text em{color:var(--mi-orange);font-style:normal;font-weight:700}
 .upload-hint { color: var(--ink-muted); font-size: 12px; }
 .hidden-input { display: none; }
 .progress-row { display: grid; gap: 12px; grid-template-columns: 180px 1fr; margin: 8px 0; }
