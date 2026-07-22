@@ -4,6 +4,10 @@ RUN corepack enable
 COPY frontend/package.json frontend/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY frontend/ ./
+ARG VITE_AMAP_KEY
+ARG VITE_AMAP_SECURITY_CODE
+ENV VITE_AMAP_KEY=$VITE_AMAP_KEY
+ENV VITE_AMAP_SECURITY_CODE=$VITE_AMAP_SECURITY_CODE
 RUN pnpm build
 
 FROM nginxinc/nginx-unprivileged:1.29.5-alpine

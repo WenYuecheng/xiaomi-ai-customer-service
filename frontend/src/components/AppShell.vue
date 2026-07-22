@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ChatDotRound, DataAnalysis, Files, House, ShoppingCart, UserFilled } from '@element-plus/icons-vue'
+import { ChatDotRound, DataAnalysis, Files, House, Service, ShoppingCart, UserFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
-const pageName = computed(() => ({ chat: '智能问答', advisor: '选购顾问', knowledge: '知识中心', operations: '运营中心', profile: '个人中心' })[String(route.name)] ?? '服务台')
+const pageName = computed(() => ({ chat: '智能问答', advisor: '选购顾问', services: '服务中心', 'service-centers': '服务网点', knowledge: '知识中心', operations: '运营中心', profile: '个人中心' })[String(route.name)] ?? '服务台')
 function logout(): void { auth.logout(); void router.push({ name: 'login' }) }
 </script>
 
@@ -21,6 +21,7 @@ function logout(): void { auth.logout(); void router.push({ name: 'login' }) }
         <span class="side-nav__label">服务</span>
         <RouterLink to="/chat"><el-icon><ChatDotRound /></el-icon><span>智能问答</span></RouterLink>
         <RouterLink to="/advisor"><el-icon><ShoppingCart /></el-icon><span>选购顾问</span></RouterLink>
+        <RouterLink to="/services"><el-icon><Service /></el-icon><span>服务中心</span></RouterLink>
         <template v-if="auth.canOperate">
           <span class="side-nav__label side-nav__label--space">运营</span>
           <RouterLink to="/knowledge"><el-icon><Files /></el-icon><span>知识中心</span></RouterLink>
@@ -40,6 +41,7 @@ function logout(): void { auth.logout(); void router.push({ name: 'login' }) }
     <nav class="mobile-nav" aria-label="移动端主导航">
       <RouterLink to="/chat"><el-icon><ChatDotRound /></el-icon><span>问答</span></RouterLink>
       <RouterLink to="/advisor"><el-icon><ShoppingCart /></el-icon><span>选购</span></RouterLink>
+      <RouterLink to="/services"><el-icon><Service /></el-icon><span>服务</span></RouterLink>
       <RouterLink to="/profile"><el-icon><UserFilled /></el-icon><span>我的</span></RouterLink>
       <RouterLink v-if="auth.canOperate" to="/knowledge"><el-icon><House /></el-icon><span>知识</span></RouterLink>
     </nav>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref, shallowRef } from 'vue'
+import { nextTick, onMounted, reactive, ref, shallowRef } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 import { api } from '@/api/client'
@@ -27,6 +28,8 @@ const feedbackOpen = shallowRef(false)
 const feedbackMessageId = shallowRef('')
 const feedbackBusy = shallowRef(false)
 const scrollAnchor = shallowRef<HTMLElement | null>(null)
+const route = useRoute()
+const router = useRouter()
 let controller: AbortController | null = null
 let activeRunId: string | undefined
 
@@ -68,6 +71,12 @@ onMounted(async () => {
     const saved = requested || localStorage.getItem(STORAGE_KEY)
     if (saved) await restoreConversation(saved)
     await loadInsights()
+    const prompt = typeof route.query.prompt === 'string' ? route.query.prompt.trim() : ''
+    if (prompt) {
+      await router.replace({ name: 'chat' })
+      await nextTick()
+      await send(prompt)
+    }
   } catch (reason) { error.value = classifyError(reason) }
 })
 
