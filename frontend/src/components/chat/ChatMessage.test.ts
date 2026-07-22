@@ -3,6 +3,48 @@ import { mount } from '@vue/test-utils'
 import ChatMessage from './ChatMessage.vue'
 
 describe('ChatMessage', () => {
+  it('places the user identity after the message body on the right', () => {
+    const wrapper = mount(ChatMessage, {
+      props: {
+        message: {
+          id: 'user-message',
+          role: 'user',
+          content: '小米 14',
+          fallback: false,
+          sources: [],
+        },
+      },
+    })
+
+    const body = wrapper.get('.message__body')
+    const identity = wrapper.get('.message__identity')
+
+    expect(wrapper.classes()).toContain('message--user')
+    expect(identity.text()).toBe('你')
+    expect(body.element.nextElementSibling).toBe(identity.element)
+  })
+
+  it('keeps the assistant identity before the answer body on the left', () => {
+    const wrapper = mount(ChatMessage, {
+      props: {
+        message: {
+          id: 'assistant-message',
+          role: 'assistant',
+          content: '这是小爱客服的回答。',
+          fallback: false,
+          sources: [],
+        },
+      },
+    })
+
+    const body = wrapper.get('.message__body')
+    const identity = wrapper.get('.message__identity')
+
+    expect(wrapper.classes()).toContain('message--assistant')
+    expect(identity.text()).toBe('小爱客服')
+    expect(identity.element.nextElementSibling).toBe(body.element)
+  })
+
   it('renders a grounded answer and its evidence source', () => {
     const wrapper = mount(ChatMessage, {
       props: {
