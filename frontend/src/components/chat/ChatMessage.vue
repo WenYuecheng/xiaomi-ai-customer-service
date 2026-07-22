@@ -26,7 +26,7 @@ const rendered = computed(() => DOMPurify.sanitize(markdown.render(props.message
 
 <template>
   <article class="message" :class="`message--${message.role}`">
-    <div class="message__identity">{{ message.role === 'assistant' ? '小爱客服' : '你' }}</div>
+    <div v-if="message.role === 'assistant'" class="message__identity">小爱客服</div>
     <div class="message__body">
       <div v-if="message.fallback" class="message__fallback">知识库暂无可靠答案</div>
       <AiTracePanel v-if="message.role === 'assistant' && message.ai_trace?.length" :steps="message.ai_trace" />
@@ -57,12 +57,17 @@ const rendered = computed(() => DOMPurify.sanitize(markdown.render(props.message
         >{{ ticketStatus === 'creating' ? '创建中…' : ticketStatus === 'created' ? '工单已创建' : '创建人工工单' }}</button>
       </div>
     </div>
+    <div v-if="message.role === 'user'" class="message__identity">你</div>
   </article>
 </template>
 
 <style scoped>
 .message { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 14px; padding: 17px 0; }
-.message__identity { color: var(--ink-muted); font-size: 12px; font-weight: 650; padding-top: 14px; }.message__identity::before { background: linear-gradient(135deg,#7050e7,#d85bb4); border-radius: 11px; color: white; content: '✦'; display: grid; height: 30px; margin-bottom: 6px; place-items: center; width: 30px; animation: avatar-glow 3s infinite alternate; }.message--user .message__identity::before { background: linear-gradient(135deg,#3d90e8,#5fc7dc); content: '你'; font-size: 11px; animation: none; }
+.message--user { grid-template-columns: minmax(0, 1fr) 72px; }
+.message__identity { color: var(--ink-muted); font-size: 12px; font-weight: 650; padding-top: 14px; }
+.message__identity::before { background: linear-gradient(135deg,#7050e7,#d85bb4); border-radius: 11px; color: white; content: '✦'; display: grid; height: 30px; margin-bottom: 6px; place-items: center; width: 30px; animation: avatar-glow 3s infinite alternate; }
+.message--user .message__identity { justify-self: end; text-align: center; }
+.message--user .message__identity::before { background: linear-gradient(135deg,#3d90e8,#5fc7dc); content: '你'; font-size: 11px; animation: none; }
 .message__body { background: rgba(255,255,255,.65); border: 1px solid rgba(255,255,255,.4); border-radius: 5px 20px 20px 20px; box-shadow: 0 4px 12px rgba(112, 79, 232, 0.05), 0 16px 32px rgba(112, 79, 232, 0.08); backdrop-filter: blur(14px); max-width: 800px; padding: 17px 19px; }.message--user .message__body { background: linear-gradient(135deg,rgba(237,244,255,.7),rgba(242,239,255,.7)); border-color: #dbe4f7; border-radius: 20px 5px 20px 20px; margin-left: auto; max-width: 72%; }
 .message__content { color: var(--ink); font-size: 15px; line-height: 1.8; }
 .message__content.is-typing::after { content: ''; display: inline-block; width: 4px; height: 1em; background: var(--mi-orange); animation: blink 1s step-end infinite; vertical-align: -2px; margin-left: 4px; }
@@ -76,7 +81,12 @@ const rendered = computed(() => DOMPurify.sanitize(markdown.render(props.message
 .message__actions button.selected { animation: feedback-pop .34s ease-out; background: #eee9ff; border-color: #8168ee; color: #5d43c8; }
 .message__actions .transfer { background: var(--mi-orange); border-color: var(--mi-orange); color: white; }
 .message__actions .transfer:disabled { cursor: default; opacity: .72; }
-@media (max-width: 640px) { .message { grid-template-columns: 1fr; gap: 6px; } }
+@media (max-width: 640px) {
+  .message { grid-template-columns: 42px minmax(0, 1fr); gap: 8px; padding: 12px 0; }
+  .message--user { grid-template-columns: minmax(0, 1fr) 42px; }
+  .message__identity { padding-top: 8px; }
+  .message--user .message__body { max-width: 88%; }
+}
 @media (prefers-reduced-motion: reduce) { .message__actions button.selected { animation: none; } .message__identity::before { animation: none; } }
 @keyframes feedback-pop { 50% { transform: scale(1.08); } }
 @keyframes avatar-glow { from { box-shadow: 0 0 4px rgba(112,80,231,.2); } to { box-shadow: 0 0 12px rgba(216,91,180,.6); } }
