@@ -261,7 +261,7 @@ pnpm test -- --run
 pnpm build
 ```
 
-当前基线为后端 67 项、前端 30 项全部通过。最终实测记录见
+当前基线为后端 68 项、主前端 30 项全部通过；Docker 使用的队长前端另有 28 项测试通过。最终实测记录见
 [测试报告](docs/testing/test-report.md)。
 
 ### RAG 回归
