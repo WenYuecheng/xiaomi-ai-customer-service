@@ -92,7 +92,7 @@ describe('DocumentManager uploads', () => {
   })
 
   it('updates a queued upload to success when the worker job completes', async () => {
-    mocks.post.mockResolvedValueOnce({ data: { job_id: 'job-pdf' } })
+    mocks.post.mockResolvedValueOnce({ data: { document_id: 'doc-pdf' } })
     mocks.get.mockImplementation((url: string) => {
       if (url === '/documents') {
         return Promise.resolve({
