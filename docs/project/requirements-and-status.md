@@ -141,7 +141,7 @@ DeepSeek 1/3 问题理解（意图分类 + 问题改写）
 
 ---
 
-## 六、数据库实体清单（共 15 张表）
+## 六、数据库实体清单（共 17 张表）
 
 | 表名 | 用途 |
 |------|------|
@@ -151,6 +151,7 @@ DeepSeek 1/3 问题理解（意图分类 + 问题改写）
 | document_chunks | 文档切分块（向量检索载体） |
 | processing_jobs | 异步任务队列状态跟踪 |
 | conversations | 多轮会话记录 |
+| conversation_knowledge_bases | 聊天会话的多知识库范围与顺序 |
 | messages | 单条消息（含意图/延迟/兜底标记） |
 | message_sources | AI 回答引用的文档片段 |
 | feedback | 用户点赞/踩与纠错建议 |
@@ -159,6 +160,7 @@ DeepSeek 1/3 问题理解（意图分类 + 问题改写）
 | tickets | 人工工单 |
 | recommendation_training_runs | 推荐模型训练记录 |
 | advisor_sessions | AI 选购顾问会话 |
+| advisor_session_knowledge_bases | Advisor 会话固定的多知识库范围与顺序 |
 | advisor_turns | 顾问会话回合（含结构化需求/计划/溯源） |
 
 ---
@@ -178,12 +180,12 @@ DeepSeek 1/3 问题理解（意图分类 + 问题改写）
 
 ---
 
-## 八、测试覆盖情况（截至 2026-07-19）
+## 八、测试覆盖情况（截至 2026-07-23）
 
 | 层级 | 数量 | 通过 | 覆盖率 |
 |------|------|------|--------|
-| 后端 pytest | 56 项 | 56/56 | 89% |
-| 前端 Vitest | 28 项 | 28/28 | — |
+| 后端 pytest | 76 项 | 76/76 | 90% |
+| 前端 Vitest | 33 项 | 33/33 | — |
 | RAG 回归集 | 30 问 | 30/30 | 100% |
 
 ---

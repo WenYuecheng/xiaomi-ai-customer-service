@@ -7,3 +7,17 @@
 账户接口包括 `POST /auth/register`、`GET /auth/me`、`PATCH /account/profile`、`POST /account/change-password`、`GET /account/dashboard` 和 `GET /account/activities`。活动分页游标仅由后端生成；客户端不得构造用户 ID 或角色字段。
 
 主要资源：`auth/account`、`knowledge-bases`、`documents/jobs`、`chat/conversations/feedback`、`advisor`、`mock/orders`、`tickets`、`operations`、`recommendations`。
+
+聊天和 Advisor 首轮支持多知识库范围：
+
+```json
+{
+  "knowledge_base_ids": ["核心库 UUID", "官方完整库 UUID"],
+  "message": "扫地机器人无法开机怎么排查？"
+}
+```
+
+数组会自动去重且限制 1–5 个，只接受 `active` 知识库。旧字段 `knowledge_base_id`
+保留兼容；新旧字段表达不同范围时返回 `422 knowledge_base_selection_conflict`。
+响应、SSE `meta` 和会话历史均返回 `knowledge_base_ids`，每个来源增加
+`knowledge_base_id` 与 `knowledge_base_name`。

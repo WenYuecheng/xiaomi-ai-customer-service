@@ -5,14 +5,14 @@
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-3776AB)](backend/pyproject.toml)
 [![Vue 3](https://img.shields.io/badge/Vue-3-42B883)](frontend/package.json)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.116+-009688)](backend/pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-84%20passed-brightgreen)](docs/testing/test-report.md)
+[![Tests](https://img.shields.io/badge/tests-109%20passed-brightgreen)](docs/testing/test-report.md)
 
 项目基于真实公开的小米产品资料构建知识库，通过“问题理解、知识召回、AI 重排、
 可信生成、引用校验”提供可解释的智能问答。系统包含完整前后端、知识入库、AI 选购、
 用户画像、运营分析、推荐训练、Mock 业务工具和 Docker 持久化，可在没有云模型密钥时
 使用确定性 Mock 完成自动测试与课程演示。
 
-公开仓库：<https://github.com/WenYuecheng/xiaomi-ai-customer-service>
+协作仓库：<https://gitee.com/jiangyuchenjyc/xiaomi-ai-customer-service-robot>
 
 ## 功能亮点
 
@@ -20,6 +20,8 @@
 - **五阶段 AI 轨迹**：页面实时展示 DeepSeek 问题理解、BGE 召回、DeepSeek 重排、
   DeepSeek 生成和引用校验，不展示密钥、系统提示词或模型思维链。
 - **型号防混淆**：产品型号硬过滤结合向量与词法融合检索，避免 X20/X20 Pro 等串答。
+- **多知识库融合**：聊天和 AI 选购可同时选择 1–5 个库，每库独立召回后全局排序，
+  引用卡明确标注来源库；默认使用核心库与官方完整库。
 - **多轮与流式输出**：滚动摘要、最近 10 轮、问题改写、SSE、停止生成和历史恢复。
 - **AI 选购实验室**：结构化理解预算和偏好，输出产品卡、对比表、雷达图和真实来源。
 - **知识运营**：PDF/DOCX/TXT/MD 入库、任务恢复、切分预览、重建、删除和知识图谱。
@@ -34,7 +36,7 @@
 
 ```text
 DeepSeek 1/3：理解意图并结合历史改写问题
-→ BAAI/bge-small-zh-v1.5：召回最多 8 个候选片段
+→ BAAI/bge-small-zh-v1.5：每库召回最多 8 条，全局保留最多 12 条
 → DeepSeek 2/3：在候选 ID 白名单内重排并保留最多 4 个
 → DeepSeek 3/3：只依据通过重排的来源生成回答
 → Citation Guard：校验答案来源和引用真实性
@@ -241,6 +243,9 @@ OLLAMA_BASE_URL=http://host.docker.internal:11434
 
 聊天支持 JSON 和 SSE。SSE 依次发送 `meta`、五阶段 `trace`、`delta`、`sources` 和
 `done`；失败时发送 `error`。引用只能来自本次实际送入生成模型的片段。
+聊天与 Advisor 新客户端提交 `knowledge_base_ids`（1–5 个、自动去重）；旧版
+`knowledge_base_id` 继续兼容。两者同时提交但范围冲突时返回
+`422 knowledge_base_selection_conflict`。
 
 ## 测试与质量检查
 
@@ -261,7 +266,7 @@ pnpm test -- --run
 pnpm build
 ```
 
-当前基线为后端 68 项、主前端 30 项全部通过；Docker 使用的队长前端另有 28 项测试通过。最终实测记录见
+当前基线为后端 76 项（覆盖率 90%）、唯一前端 33 项全部通过。最终实测记录见
 [测试报告](docs/testing/test-report.md)。
 
 ### RAG 回归
@@ -297,6 +302,16 @@ backend/.venv/bin/python scripts/ingest_product_knowledge.py \
 脚本会创建或复用“小米生态核心库”和“竞品选购对比库”，重复文件按文件名跳过，
 并把文档主要来源写入引用卡片。自动质量检查不替代审核表中的人工终审。
 
+### 四格式上传复验
+
+`data/upload-fixtures/` 长期保留 PDF、DOCX、TXT、MD 四种非产品事实样本。建议先创建
+独立“文件上传验收库”，再从前端批量上传；也可用运营账号执行：
+
+```bash
+INGEST_PASSWORD='你的运营账号密码' \
+backend/.venv/bin/python scripts/verify_upload_fixtures.py
+```
+
 ## 项目结构
 
 ```text
@@ -305,6 +320,7 @@ frontend/              Vue 工作台、组件、API 封装、状态和测试
 data/samples/          10 份快速演示知识样本
 data/knowledge/        62 份官方资料、50 份分库产品资料及来源审核表
 data/evaluation/       30 问基础集与 114 问扩展集
+data/upload-fixtures/  PDF、DOCX、TXT、MD 四种真实上传验收文件
 docs/planning/         原始需求与实施规划
 docs/project/          需求完成情况、结构和整理决策
 docs/requirements/     Story 追踪矩阵

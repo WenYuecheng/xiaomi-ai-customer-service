@@ -48,7 +48,8 @@ backend/
 │   │   └── schemas.py          账号、活动与仪表盘模型
 │   ├── knowledge/
 │   │   ├── router.py           知识库 CRUD 与可视化分析
-│   │   └── schemas.py          知识库和知识图谱响应模型
+│   │   ├── schemas.py          知识库和知识图谱响应模型
+│   │   └── selection.py        1–5 库选择、兼容与有效状态校验
 │   ├── ingestion/
 │   │   ├── router.py           上传、预览、重建、重试和删除接口
 │   │   ├── parsers.py          PDF/DOCX/TXT/MD 解析和型号提取
@@ -73,10 +74,10 @@ backend/
 │       ├── analytics.py        中文热词与时间衰减统计
 │       ├── recommendation.py   混合推荐与 TruncatedSVD 训练
 │       └── schemas.py          运营与推荐响应模型
-├── tests/                      56 项后端测试及共享夹具
+├── tests/                      76 项后端测试及共享夹具
 ├── alembic/
 │   ├── env.py                  迁移运行环境
-│   └── versions/               初始、Advisor、用户资料迁移
+│   └── versions/               初始、Advisor、用户资料与多库范围迁移
 ├── Dockerfile                  Python 3.11 非 root 后端镜像
 ├── pyproject.toml              依赖与 pytest/Ruff 配置
 ├── uv.lock                     精确依赖锁文件
@@ -132,6 +133,7 @@ frontend/
 
 ```text
 data/
+├── upload-fixtures/          四种真实文件上传验收资料
 ├── samples/                 10 份快速演示样本与 SOURCES.md
 ├── knowledge/
 │   ├── manifest.csv         46 个公开来源页面的分类和 URL
