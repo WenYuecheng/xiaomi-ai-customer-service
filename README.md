@@ -261,7 +261,7 @@ pnpm test -- --run
 pnpm build
 ```
 
-当前基线为后端 56 项、前端 28 项全部通过，后端覆盖率 89%。最终实测记录见
+当前基线为后端 67 项、前端 30 项全部通过。最终实测记录见
 [测试报告](docs/testing/test-report.md)。
 
 ### RAG 回归
@@ -278,13 +278,32 @@ backend/.venv/bin/python scripts/run_rag_evaluation.py \
 
 验收线为不低于 80%；当前 30 问 Mock 基线记录为 30/30。
 
+### 双产品知识库
+
+新增产品资料按用途隔离，避免客服问答混入竞品：
+
+- `data/knowledge/product-core/`：30 份小米、REDMI、米家资料。
+- `data/knowledge/product-comparison/`：20 份竞品资料，仅用于选购与对比。
+- `data/knowledge/audits/product-source-review.xlsx`：来源、价格口径、分库和人工审核台账。
+
+导入前会强制检查元数据、来源 URL、审核状态和未核实标记；密码只从环境变量读取：
+
+```bash
+INGEST_PASSWORD='你的运营账号密码' \
+backend/.venv/bin/python scripts/ingest_product_knowledge.py \
+  --base-url http://127.0.0.1:8000/api/v1
+```
+
+脚本会创建或复用“小米生态核心库”和“竞品选购对比库”，重复文件按文件名跳过，
+并把文档主要来源写入引用卡片。自动质量检查不替代审核表中的人工终审。
+
 ## 项目结构
 
 ```text
 backend/               FastAPI、数据库、文档处理、RAG、顾问和运营模块
 frontend/              Vue 工作台、组件、API 封装、状态和测试
 data/samples/          10 份快速演示知识样本
-data/knowledge/        62 份正式资料与来源清单
+data/knowledge/        62 份官方资料、50 份分库产品资料及来源审核表
 data/evaluation/       30 问基础集与 114 问扩展集
 docs/planning/         原始需求与实施规划
 docs/project/          需求完成情况、结构和整理决策
