@@ -3,6 +3,8 @@ from pathlib import Path
 
 from app.ingestion.parsers import extract_product_models
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
 VALID_DOCUMENT = """---
 文档编号: "PROD-999"
 标题: "OPPO Pad 4 Pro 参数资料"
@@ -66,3 +68,27 @@ def test_library_is_derived_from_brand() -> None:
     assert module.library_for_brand("REDMI") == "小米生态核心库"
     assert module.library_for_brand("米家") == "小米生态核心库"
     assert module.library_for_brand("OPPO") == "竞品选购对比库"
+
+
+def test_repository_product_libraries_are_publishable_and_complete() -> None:
+    module = quality_module()
+    core_files = sorted((PROJECT_ROOT / "data/knowledge/product-core").glob("PROD-*.md"))
+    comparison_files = sorted(
+        (PROJECT_ROOT / "data/knowledge/product-comparison").glob("PROD-*.md")
+    )
+
+    assert len(core_files) == 30
+    assert len(comparison_files) == 20
+
+    identifiers: set[str] = set()
+    models: set[str] = set()
+    for path in [*core_files, *comparison_files]:
+        metadata, _body = module.parse_front_matter(path.read_text(encoding="utf-8-sig"))
+        assert module.validate_publishable_document(path) == [], path.name
+        assert metadata["文档编号"] not in identifiers
+        assert metadata["型号"].lower() not in models
+        identifiers.add(metadata["文档编号"])
+        models.add(metadata["型号"].lower())
+
+    assert len(identifiers) == 50
+    assert len(models) == 50
