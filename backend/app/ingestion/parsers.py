@@ -110,7 +110,7 @@ def extract_product_models(text: str) -> list[str]:
     models: set[str] = set()
     metadata, _body = parse_front_matter(text)
     if model := metadata.get("型号", "").strip():
-        models.add(re.sub(r"\s+", " ", model).strip().lower())
+        return [re.sub(r"\s+", " ", model).strip().lower()]
     labels = ("小米", "红米", "Smart Band", "Robot Vacuum", "米家", "")
     for pattern, label in zip(PRODUCT_MODEL_PATTERNS, labels, strict=True):
         for match in pattern.findall(text):
@@ -153,8 +153,13 @@ def split_sections(
     )
     chunks: list[tuple[str, str, list[str]]] = []
     for section in sections:
-        for text in splitter.split_text(section.text):
+        metadata, answerable_text = parse_front_matter(section.text)
+        declared_model = re.sub(r"\s+", " ", metadata.get("型号", "")).strip().lower()
+        for text in splitter.split_text(answerable_text):
             cleaned = clean_text(text)
             if cleaned:
-                chunks.append((cleaned, section.location, extract_product_models(cleaned)))
+                product_models = (
+                    [declared_model] if declared_model else extract_product_models(cleaned)
+                )
+                chunks.append((cleaned, section.location, product_models))
     return chunks

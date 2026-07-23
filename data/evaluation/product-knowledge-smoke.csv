@@ -1,0 +1,5 @@
+id,library,question,expected_filename,expected_keywords
+PK-001,小米生态核心库,小米 17 Ultra 的电池和充电参数是什么？,PROD-010_xiaomi-17-ultra.md,6800mAh|90W
+PK-002,小米生态核心库,REDMI K80 Pro 的电池容量是多少？,PROD-018_redmi-k80-pro.md,电池
+PK-003,竞品选购对比库,OPPO Pad 4 Pro 的屏幕和性能参数是什么？,PROD-030_oppo-pad-4-pro.md,屏幕
+PK-004,竞品选购对比库,vivo Watch 5 有哪些主要参数？,PROD-042_vivo-watch-5.md,Watch 5

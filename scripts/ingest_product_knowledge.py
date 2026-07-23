@@ -46,7 +46,9 @@ def discover_documents(root: Path) -> list[ProductDocument]:
     return documents
 
 
-def build_upload_data(document: ProductDocument, knowledge_base_id: str) -> dict[str, str]:
+def build_upload_data(
+    document: ProductDocument, knowledge_base_id: str
+) -> dict[str, str]:
     return {
         "knowledge_base_id": knowledge_base_id,
         "source_url": document.source_url,
@@ -58,7 +60,11 @@ def build_upload_data(document: ProductDocument, knowledge_base_id: str) -> dict
 def pending_documents(
     documents: list[ProductDocument], existing_filenames: set[str]
 ) -> list[ProductDocument]:
-    return [document for document in documents if document.path.name not in existing_filenames]
+    return [
+        document
+        for document in documents
+        if document.path.name not in existing_filenames
+    ]
 
 
 def get_or_create_knowledge_base(
@@ -69,7 +75,9 @@ def get_or_create_knowledge_base(
 ) -> str:
     response = client.get("/knowledge-bases", headers=headers, params={"q": name})
     response.raise_for_status()
-    existing = next((item for item in response.json()["items"] if item["name"] == name), None)
+    existing = next(
+        (item for item in response.json()["items"] if item["name"] == name), None
+    )
     if existing:
         return existing["id"]
     response = client.post(
@@ -113,12 +121,18 @@ def import_library(
             if job["status"] in {"succeeded", "failed", "cancelled"}:
                 if job["status"] != "succeeded":
                     failures.append(
-                        {"filename": filename, "status": job["status"], "error": job["error_message"]}
+                        {
+                            "filename": filename,
+                            "status": job["status"],
+                            "error": job["error_message"],
+                        }
                     )
                 break
             time.sleep(0.25)
         else:
-            failures.append({"filename": filename, "status": "timeout", "error": "等待超时"})
+            failures.append(
+                {"filename": filename, "status": "timeout", "error": "等待超时"}
+            )
 
     analytics = client.get(
         f"/knowledge-bases/{knowledge_base_id}/analytics", headers=headers
@@ -149,7 +163,9 @@ def main() -> None:
     documents = discover_documents(args.documents_root)
     grouped = {
         CORE_LIBRARY: [item for item in documents if item.library == CORE_LIBRARY],
-        COMPARISON_LIBRARY: [item for item in documents if item.library == COMPARISON_LIBRARY],
+        COMPARISON_LIBRARY: [
+            item for item in documents if item.library == COMPARISON_LIBRARY
+        ],
     }
     names = {CORE_LIBRARY: args.core_name, COMPARISON_LIBRARY: args.comparison_name}
     descriptions = {

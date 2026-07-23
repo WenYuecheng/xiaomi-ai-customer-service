@@ -9,9 +9,11 @@ RAG 引擎（Retrieval-Augmented Generation） -> 上下文召回。
 定义了基于词法匹配和向量模型结合的查询管道。
 """
 
+import re
 from dataclasses import dataclass
 
 import jieba
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import Document, DocumentChunk
@@ -50,6 +52,36 @@ class RetrievedSource:
     location: str
     snippet: str
     score: float
+
+
+def requested_product_models(session: Session, knowledge_base_id: str, query: str) -> set[str]:
+    """Resolve an explicit query model against generic entities stored in the library."""
+    if extracted := set(extract_product_models(query)):
+        return extracted
+
+    compact_query = re.sub(r"\s+", "", query).lower()
+    stored_models = {
+        model
+        for models in session.scalars(
+            select(DocumentChunk.product_models).where(
+                DocumentChunk.knowledge_base_id == knowledge_base_id
+            )
+        )
+        for model in models
+        if model
+    }
+    matched = {
+        model for model in stored_models if re.sub(r"\s+", "", model).lower() in compact_query
+    }
+    return {
+        model
+        for model in matched
+        if not any(
+            model != other
+            and re.sub(r"\s+", "", model).lower() in re.sub(r"\s+", "", other).lower()
+            for other in matched
+        )
+    }
 
 
 def lexical_score(query: str, text: str) -> float:
@@ -134,7 +166,7 @@ def retrieve_sources(
         query, k=max(top_k * 5, 20)
     )
 
-    requested_models = set(extract_product_models(query))
+    requested_models = requested_product_models(session, knowledge_base_id, query)
     sources: list[RetrievedSource] = []
 
     for langchain_document, distance in results:
