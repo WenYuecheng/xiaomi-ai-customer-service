@@ -64,8 +64,8 @@ DeepSeek 1/3：理解意图并结合历史改写问题
 安装可用的 Docker Desktop 与 Docker Compose，然后克隆仓库：
 
 ```bash
-git clone https://github.com/WenYuecheng/xiaomi-ai-customer-service.git
-cd xiaomi-ai-customer-service
+git clone https://gitee.com/jiangyuchenjyc/xiaomi-ai-customer-service-robot.git
+cd xiaomi-ai-customer-service-robot
 cp .env.example .env
 ```
 
@@ -78,9 +78,13 @@ JWT_SECRET=替换为至少32个随机字符
 INITIAL_ADMIN_PASSWORD=替换为管理员演示密码
 INITIAL_OPERATOR_PASSWORD=替换为运营演示密码
 INITIAL_USER_PASSWORD=替换为普通用户演示密码
+VITE_AMAP_KEY=高德Web端Key
+VITE_AMAP_SECURITY_CODE=高德JS安全密钥
 ```
 
 `.env` 已被 Git 忽略，不要把真实 DeepSeek 密钥、JWT 密钥或密码写入 README、源码或提交历史。
+高德的两个 `VITE_AMAP_*` 变量属于前端构建期配置；修改后必须重新执行
+`docker compose build frontend && docker compose up -d frontend`，仅重启旧容器不会生效。
 
 ### 3. 构建并启动
 
