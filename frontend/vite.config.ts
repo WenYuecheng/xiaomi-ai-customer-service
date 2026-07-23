@@ -7,6 +7,7 @@ import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import { defineConfig } from 'vite'
 
 export default defineConfig({
+  envDir: '..',
   plugins: [
     vue(),
     AutoImport({ resolvers: [ElementPlusResolver()] }),

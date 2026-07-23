@@ -29,6 +29,10 @@ const windowName = shallowRef<'day' | 'week' | 'month'>('week')
 const rating = shallowRef('')
 const filteredLogs = computed(() => logs.value.filter((item) => !query.value || `${item.question} ${item.answer} ${item.intent}`.toLowerCase().includes(query.value.toLowerCase())))
 const filteredFeedback = computed(() => feedback.value.filter((item) => !rating.value || item.rating === rating.value))
+const groundedRate = computed(() => logs.value.length ? Math.round(logs.value.filter((item) => !item.fallback).length / logs.value.length * 100) : 0)
+const helpfulRate = computed(() => feedback.value.length ? Math.round(feedback.value.filter((item) => item.rating === 'up').length / feedback.value.length * 100) : 0)
+const openTickets = computed(() => tickets.value.filter((item) => !['resolved', 'closed'].includes(item.status)).length)
+const averageLatency = computed(() => { const values = logs.value.map((item) => item.latency_ms).filter((value): value is number => typeof value === 'number'); return values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : 0 })
 const intentLabels: Record<string, string> = { knowledge_query: '产品知识', human_transfer: '人工服务', order_query: '订单物流', troubleshooting: '故障排查' }
 const priorityMeta: Record<string, { label: string; type: 'info'|'primary'|'warning'|'danger'; icon: typeof Clock }> = {
   low: { label: '低优先级', type: 'info', icon: Clock }, normal: { label: '普通', type: 'primary', icon: Opportunity }, high: { label: '优先处理', type: 'warning', icon: Promotion }, urgent: { label: '紧急', type: 'danger', icon: WarningFilled },
@@ -73,6 +77,7 @@ onMounted(load)
 
 <template>
   <div class="operations-dashboard">
+    <section class="ops-kpis"><article><span>可信回答率</span><strong>{{ groundedRate }}%</strong><small>{{ logs.length }} 次已记录咨询</small></article><article><span>用户认可率</span><strong>{{ helpfulRate }}%</strong><small>{{ feedback.length }} 条显式反馈</small></article><article><span>待处理工单</span><strong>{{ openTickets }}</strong><small>需要人工协同的问题</small></article><article><span>平均响应时间</span><strong>{{ averageLatency }}<em>ms</em></strong><small>已完成回答统计</small></article></section>
     <div class="toolbar"><div><b>洞察周期</b><span>切换后同步更新词云与热力图</span></div><el-segmented v-model="windowName" :options="[{ label: '今日', value: 'day' }, { label: '本周', value: 'week' }, { label: '本月', value: 'month' }]" @change="loadTopics" /></div>
     <TopicVisualization :topics="topics" :heatmap="heatmap" />
     <TrainingGuide :runs="trainingRuns" :busy="busy" @train="train" />
@@ -99,6 +104,9 @@ onMounted(load)
 </template>
 
 <style scoped>
-.operations-dashboard { display: grid; gap: 18px; }.toolbar { align-items: center; background: rgba(255,255,255,.76); border: 1px solid #e6e1f2; border-radius: 16px; display: flex; justify-content: space-between; padding: 12px 14px; }.toolbar b,.toolbar span { display: block; }.toolbar b { font-size: 13px; }.toolbar span { color: var(--ink-muted); font-size: 10px; margin-top: 2px; }.data-tabs { background: rgba(255,255,255,.86); border: 1px solid #e5e0f1; border-radius: 22px; padding: 10px 18px 18px; }.table-filter { margin-bottom: 14px; max-width: 360px; }.tag-icon { height: 13px; margin-right: 4px; vertical-align: -2px; width: 13px; } code { white-space: pre-wrap; word-break: break-word; }
-@media(max-width:680px){.toolbar{align-items:stretch;flex-direction:column;gap:10px}}
+.operations-dashboard{display:grid;gap:16px}.ops-kpis{display:grid;gap:10px;grid-template-columns:repeat(4,1fr)}.ops-kpis article{background:#fff;border:1px solid var(--line);border-radius:15px;padding:16px}.ops-kpis span,.ops-kpis small{display:block}.ops-kpis span{color:var(--ink-muted);font-size:10px;font-weight:650}.ops-kpis strong{display:block;font-size:30px;letter-spacing:-.04em;margin:7px 0}.ops-kpis strong em{color:var(--ink-muted);font-size:11px;font-style:normal;margin-left:3px}.ops-kpis small{color:#aaa6a0;font-size:9px}.ops-kpis article:first-child{background:#1d1c1a;color:white}.ops-kpis article:first-child strong{color:#69d69e}.toolbar{align-items:center;background:#fff;border:1px solid var(--line);border-radius:14px;display:flex;justify-content:space-between;padding:12px 14px}.toolbar b,.toolbar span{display:block}.toolbar b{font-size:13px}.toolbar span{color:var(--ink-muted);font-size:10px;margin-top:2px}.data-tabs{background:#fff;border:1px solid var(--line);border-radius:18px;padding:10px 18px 18px}.table-filter{margin-bottom:14px;max-width:360px}.tag-icon{height:13px;margin-right:4px;vertical-align:-2px;width:13px}code{white-space:pre-wrap;word-break:break-word}
+@media(max-width:900px){.ops-kpis{grid-template-columns:1fr 1fr}}@media(max-width:680px){.ops-kpis{grid-template-columns:1fr 1fr}.toolbar{align-items:stretch;flex-direction:column;gap:10px}}
+</style>
+<style scoped>
+.ops-kpis article:first-child{background:#fff7f0;border-color:#ffd9bd;color:var(--ink)}.ops-kpis article:first-child strong{color:var(--mi-orange)}
 </style>

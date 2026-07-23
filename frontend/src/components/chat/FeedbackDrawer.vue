@@ -71,3 +71,6 @@ function submit(): void {
 @media (max-width: 520px) { .reason-grid { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { .reason-grid button { transition: none; } }
 </style>
+<style scoped>
+.feedback-heading>span{background:#fff2e8;border:1px solid #ffd6b7;color:var(--mi-orange)}.reason-grid button{background:#faf9f7;border-color:var(--line);color:var(--ink-soft)}.reason-grid button:hover{border-color:#ffc397}.reason-grid button.selected{background:#fff3e9;border-color:#ffb77f;color:#b84d08}.feedback-drawer :deep(.el-drawer__body){background:#fbfaf8}
+</style>

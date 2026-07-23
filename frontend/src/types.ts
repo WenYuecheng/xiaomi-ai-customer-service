@@ -93,6 +93,8 @@ export interface Source {
   snippet: string
   score: number
   source_url?: string | null
+  knowledge_base_id?: string | null
+  knowledge_base_name?: string | null
 }
 
 export interface AiTraceStep {
@@ -119,6 +121,8 @@ export interface ChatMessage {
 
 export interface ChatCompletion {
   conversation_id: string
+  knowledge_base_id: string
+  knowledge_base_ids: readonly string[]
   message_id: string
   run_id: string
   answer: string
@@ -176,6 +180,7 @@ export interface AdvisorTurn {
 export interface AdvisorSessionSummary {
   id: string
   knowledge_base_id: string
+  knowledge_base_ids: readonly string[]
   title: string
   category?: string | null
   turn_count: number

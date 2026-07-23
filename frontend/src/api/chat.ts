@@ -24,7 +24,7 @@ export class ChatStreamError extends Error {
 }
 
 export async function streamChat(
-  payload: { knowledge_base_id: string; conversation_id?: string; message: string },
+  payload: { knowledge_base_id?: string; knowledge_base_ids?: string[]; conversation_id?: string; message: string },
   handlers: StreamHandlers,
   signal: AbortSignal,
 ): Promise<void> {

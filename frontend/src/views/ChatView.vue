@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref, shallowRef } from 'vue'
+import { nextTick, onMounted, reactive, ref, shallowRef } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 import { api } from '@/api/client'
@@ -8,11 +9,12 @@ import ChatComposer from '@/components/chat/ChatComposer.vue'
 import ChatMessage from '@/components/chat/ChatMessage.vue'
 import FeedbackDrawer from '@/components/chat/FeedbackDrawer.vue'
 import ProfileDrawer from '@/components/chat/ProfileDrawer.vue'
+import KnowledgeBaseMultiSelect from '@/components/knowledge/KnowledgeBaseMultiSelect.vue'
 import type { AdvisorPlan, AiTraceStep, ChatMessage as Message, KnowledgeBase, Source } from '@/types'
 
 const STORAGE_KEY = 'xmcs_last_conversation'
 const knowledgeBases = shallowRef<KnowledgeBase[]>([])
-const knowledgeBaseId = shallowRef('')
+const knowledgeBaseIds = ref<string[]>([])
 const conversationId = shallowRef<string>()
 const messages = ref<Message[]>([])
 const busy = shallowRef(false)
@@ -27,6 +29,8 @@ const feedbackOpen = shallowRef(false)
 const feedbackMessageId = shallowRef('')
 const feedbackBusy = shallowRef(false)
 const scrollAnchor = shallowRef<HTMLElement | null>(null)
+const route = useRoute()
+const router = useRouter()
 let controller: AbortController | null = null
 let activeRunId: string | undefined
 
@@ -38,10 +42,11 @@ function classifyError(reason: unknown): string {
 
 async function restoreConversation(id: string): Promise<void> {
   try {
-    const response = await api.get<{ knowledge_base_id: string; messages: Message[] }>(`/conversations/${id}`)
-    if (!knowledgeBases.value.some((item) => item.id === response.data.knowledge_base_id)) return
+    const response = await api.get<{ knowledge_base_id: string; knowledge_base_ids?: string[]; messages: Message[] }>(`/conversations/${id}`)
+    const restoredIds = response.data.knowledge_base_ids ?? [response.data.knowledge_base_id]
+    if (restoredIds.some((id) => !knowledgeBases.value.some((item) => item.id === id))) return
     conversationId.value = id
-    knowledgeBaseId.value = response.data.knowledge_base_id
+    knowledgeBaseIds.value = restoredIds
     messages.value = response.data.messages
   } catch {
     localStorage.removeItem(STORAGE_KEY)
@@ -49,10 +54,10 @@ async function restoreConversation(id: string): Promise<void> {
 }
 
 async function loadInsights(): Promise<void> {
-  if (!knowledgeBaseId.value) return
+  if (!knowledgeBaseIds.value.length) return
   const [profileResult, recommendationResult] = await Promise.all([
     api.get('/operations/profile/me'),
-    api.get('/recommendations', { params: { knowledge_base_id: knowledgeBaseId.value } }),
+    api.get('/recommendations', { params: { knowledge_base_id: knowledgeBaseIds.value[0] } }),
   ])
   profile.value = profileResult.data
   recommendations.value = recommendationResult.data.items
@@ -63,16 +68,21 @@ onMounted(async () => {
   try {
     const response = await api.get<{ items: KnowledgeBase[] }>('/knowledge-bases')
     knowledgeBases.value = response.data.items.filter((item) => item.status === 'active')
-    knowledgeBaseId.value = knowledgeBases.value[0]?.id ?? ''
     const requested = new URLSearchParams(window.location.search).get('conversation_id')
     const saved = requested || localStorage.getItem(STORAGE_KEY)
     if (saved) await restoreConversation(saved)
     await loadInsights()
+    const prompt = typeof route.query.prompt === 'string' ? route.query.prompt.trim() : ''
+    if (prompt) {
+      await router.replace({ name: 'chat' })
+      await nextTick()
+      await send(prompt)
+    }
   } catch (reason) { error.value = classifyError(reason) }
 })
 
 async function send(message: string): Promise<void> {
-  if (!knowledgeBaseId.value || busy.value) return
+  if (!knowledgeBaseIds.value.length || busy.value) return
   error.value = ''; busy.value = true; activeRunId = undefined
   controller = new AbortController()
   messages.value = [...messages.value, { id: crypto.randomUUID(), role: 'user', content: message, fallback: false, sources: [] }]
@@ -107,7 +117,7 @@ async function send(message: string): Promise<void> {
   try {
     try {
       await streamChat(
-        { knowledge_base_id: knowledgeBaseId.value, conversation_id: conversationId.value, message },
+        { knowledge_base_ids: knowledgeBaseIds.value, conversation_id: conversationId.value, message },
         handlers,
         controller.signal,
       )
@@ -116,7 +126,7 @@ async function send(message: string): Promise<void> {
       conversationId.value = undefined
       localStorage.removeItem(STORAGE_KEY)
       await streamChat(
-        { knowledge_base_id: knowledgeBaseId.value, message },
+        { knowledge_base_ids: knowledgeBaseIds.value, message },
         handlers,
         controller.signal,
       )
@@ -193,26 +203,23 @@ async function clearProfile(): Promise<void> {
 
 <template>
   <section class="chat-page">
-    <header class="page-heading"><div><span>GROUNDED CONVERSATION ✦</span><h1>你好，今天想了解什么？</h1><p>从具体型号、使用问题或售后需求开始，每个产品事实都有官方依据。</p></div><div class="chat-controls"><el-select v-model="knowledgeBaseId" placeholder="选择知识库" style="width: 220px" @change="changeKnowledgeBase"><el-option v-for="item in knowledgeBases" :key="item.id" :label="item.name" :value="item.id" /></el-select><el-button @click="clearConversation">开启新对话</el-button></div></header>
+    <header class="page-heading"><div><span>AI CUSTOMER SERVICE</span><h1>你好，需要什么帮助？</h1><p>产品参数、使用指导、选购对比与售后政策，都可以直接问我。</p></div><div class="chat-controls"><KnowledgeBaseMultiSelect v-model="knowledgeBaseIds" :items="knowledgeBases" @change="changeKnowledgeBase" /><el-button @click="clearConversation">新建对话</el-button></div></header>
     <el-alert v-if="error" :title="error" type="error" show-icon closable @close="error = ''" />
     <aside class="insight-strip">
-      <div><b>{{ coldStart ? '热门推荐' : '为你推荐' }}</b><button v-for="item in recommendations.slice(0, 4)" :key="item.product_model" type="button" @click="send(`${item.product_model} 有哪些主要特点？`)">{{ item.product_model }} · {{ item.reason }}</button></div>
-      <el-button @click="profileOpen = true">我的咨询画像</el-button>
+      <div><b>{{ coldStart ? '大家都在问' : '根据你的偏好' }}</b><button v-for="item in recommendations.slice(0, 4)" :key="item.product_model" type="button" @click="send(`${item.product_model} 有哪些主要特点？`)">{{ item.product_model }}</button></div>
+      <button class="profile-entry" type="button" @click="profileOpen = true">查看我的服务画像 →</button>
     </aside>
-    <div v-if="!messages.length" class="chat-empty"><strong>从一个具体型号开始</strong><p>例如：“小米 14 支持多少瓦快充？”</p></div>
-    <div class="message-list">
-      <ChatMessage v-for="(message, index) in messages" :key="message.id" :message="message" :ticket-status="ticketStatus" :feedback-rating="feedbackRatings[message.id]" :is-typing="busy && index === messages.length - 1 && message.role === 'assistant'" @feedback="feedback" @create-ticket="createTicket" />
-      <div ref="scrollAnchor" style="height: 1px;"></div>
+    <div class="conversation-panel">
+      <div v-if="!messages.length" class="chat-empty"><div class="bot-mark">MI</div><strong>小爱客服已准备好</strong><p>回答会严格依据当前知识库，并在答案下方展示原文来源。</p><div class="quick-questions"><button type="button" @click="send('小米手机如何开启无线充电？')"><b>产品使用</b><span>小米手机如何开启无线充电？</span></button><button type="button" @click="send('扫地机器人无法开机怎么排查？')"><b>故障排查</b><span>扫地机器人无法开机怎么办？</span></button><button type="button" @click="send('介绍一下小米的售后服务政策')"><b>售后政策</b><span>退换货与维修政策是什么？</span></button></div></div>
+      <div class="message-list"><ChatMessage v-for="(message, index) in messages" :key="message.id" :message="message" :ticket-status="ticketStatus" :feedback-rating="feedbackRatings[message.id]" :is-typing="busy && index === messages.length - 1 && message.role === 'assistant'" @feedback="feedback" @create-ticket="createTicket" /><div ref="scrollAnchor" style="height: 1px;"></div></div>
+      <ChatComposer :busy="busy" :disabled="!knowledgeBaseIds.length" @send="send" @stop="stopGeneration" />
+      <p class="answer-note">AI 回答仅供参考，重要信息请以小米官方页面与服务政策为准。</p>
     </div>
-    <ChatComposer :busy="busy" :disabled="!knowledgeBaseId" @send="send" @stop="stopGeneration" />
     <ProfileDrawer :open="profileOpen" :profile="profile" @close="profileOpen = false" @clear="clearProfile" />
     <FeedbackDrawer :open="feedbackOpen" :loading="feedbackBusy" @close="feedbackOpen = false" @submit="submitCorrection" />
   </section>
 </template>
 
 <style scoped>
-.chat-page { margin: 0 auto; max-width: 980px; }.page-heading { align-items: end; display: flex; justify-content: space-between; margin-bottom: 28px; }.page-heading span { background: linear-gradient(90deg,#684bd8,#d45db4); background-clip: text; color: transparent; font-family: var(--font-mono); font-size: 11px; letter-spacing: .16em; }.page-heading h1 { font-size: clamp(32px,4vw,46px); letter-spacing: -.045em; margin: 9px 0; }.page-heading p { color: var(--ink-muted); margin: 0; max-width: 620px; }.chat-controls { display: flex; gap: 8px; }.chat-empty { background: radial-gradient(circle at 50% 0,rgba(176,139,255,.2),transparent 55%),rgba(255,255,255,.68); border: 1px dashed #cfc3ee; border-radius: 22px; color: var(--ink-muted); margin: 44px 0; padding: 54px; text-align: center; }.chat-empty strong { color: var(--ink); display: block; font-size: 20px; }.message-list { min-height: 260px; }
-.insight-strip { align-items: center; background: rgba(255,255,255,.72); border: 1px solid #e4def1; border-radius: 18px; box-shadow: 0 16px 36px rgba(67,48,119,.06); display: flex; gap: 14px; justify-content: space-between; margin: 14px 0; padding: 13px 15px; backdrop-filter: blur(14px); }.insight-strip div { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }.insight-strip b { color: #6048b9; }.insight-strip button { background: linear-gradient(135deg,#eee9ff,#fcecff); border: 1px solid #e0d6fa; border-radius: 999px; color: #654db7; cursor: pointer; padding: 7px 11px; transition: transform .18s ease,box-shadow .18s ease; }.insight-strip button:hover { box-shadow: 0 8px 18px rgba(107,75,195,.14); transform: translateY(-2px); }
-@media (max-width: 760px) { .page-heading { align-items: start; flex-direction: column; gap: 18px; } }
-@media (prefers-reduced-motion: reduce) { .insight-strip button { transition: none; } }
+.chat-page{margin:0 auto;max-width:1100px}.page-heading{align-items:flex-end;display:flex;justify-content:space-between;margin-bottom:24px}.page-heading>div:first-child{max-width:680px}.page-heading span{color:var(--mi-orange);font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:.16em}.page-heading h1{font-size:clamp(34px,4vw,52px);letter-spacing:-.05em;line-height:1.05;margin:9px 0 10px}.page-heading p{color:var(--ink-muted);font-size:15px;margin:0}.chat-controls{align-items:center;display:flex;gap:8px}.insight-strip{align-items:center;background:#fff;border:1px solid var(--line);border-radius:15px;display:flex;justify-content:space-between;margin-bottom:14px;padding:10px 12px}.insight-strip>div{align-items:center;display:flex;flex-wrap:wrap;gap:7px}.insight-strip>div>b{font-size:12px;margin:0 4px}.insight-strip>div button{background:#f7f5f2;border:1px solid #ebe7e1;border-radius:9px;color:var(--ink-soft);cursor:pointer;padding:7px 10px}.insight-strip>div button:hover{border-color:#ffc69e;color:var(--mi-orange)}.profile-entry{background:none;border:0;color:var(--ink-muted);cursor:pointer;font-size:11px;white-space:nowrap}.conversation-panel{background:#fff;border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow-sm);overflow:hidden;padding:0 22px 12px}.chat-empty{color:var(--ink-muted);padding:54px 24px 38px;text-align:center}.bot-mark{background:var(--mi-orange);border-radius:14px;box-shadow:0 10px 25px rgba(255,105,0,.22);color:#fff;display:grid;font-size:13px;font-weight:800;height:44px;margin:0 auto 15px;place-items:center;width:44px}.chat-empty>strong{color:var(--ink);display:block;font-size:20px}.chat-empty>p{font-size:13px;margin:8px auto 28px;max-width:470px}.quick-questions{display:grid;gap:9px;grid-template-columns:repeat(3,1fr);margin:0 auto;max-width:850px}.quick-questions button{background:#faf9f7;border:1px solid var(--line);border-radius:13px;cursor:pointer;padding:14px;text-align:left}.quick-questions button:hover{background:#fff8f2;border-color:#ffc89f}.quick-questions b,.quick-questions span{display:block}.quick-questions b{color:var(--mi-orange);font-size:10px;margin-bottom:6px}.quick-questions span{color:var(--ink-soft);font-size:12px}.message-list{min-height:140px}.answer-note{color:#aaa6a1;font-size:10px;margin:9px 0 0;text-align:center}@media(max-width:760px){.page-heading{align-items:flex-start;flex-direction:column;gap:18px}.chat-controls{align-items:stretch;width:100%}.profile-entry{display:none}.conversation-panel{padding:0 12px 10px}.quick-questions{grid-template-columns:1fr}.chat-empty{padding:38px 4px 24px}.page-heading h1{font-size:36px}}
 </style>

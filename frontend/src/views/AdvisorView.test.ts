@@ -46,7 +46,7 @@ describe('AdvisorView', () => {
     })
     await flushPromises()
 
-    expect(wrapper.text()).toContain('AI 智能选购实验室')
+    expect(wrapper.text()).toContain('选得明白，也有依据')
     wrapper.findComponent(AdvisorBriefForm).vm.$emit('submit', {
       knowledge_base_id: 'kb-1', message: '推荐续航好的手机', category: 'phone',
       mode: 'purchase_advice', priorities: ['battery'], product_models: [],
