@@ -32,3 +32,14 @@ def test_backend_container_runs_migrations_before_demo_initialization() -> None:
     # 断言这三个命令在 Dockerfile 中的书写顺序必须是：准备迁移 -> 执行迁移 -> 初始化数据。
     # 这个顺序保证了表结构创建后才进行数据插入。
     assert preparation < migration < initialization
+
+
+def test_compose_builds_the_preserved_teammate_frontend() -> None:
+    project_root = Path(__file__).resolve().parents[2]
+    compose = (project_root / "docker-compose.yml").read_text(encoding="utf-8")
+    dockerfile = (project_root / "frontend-team-lead/Dockerfile").read_text(encoding="utf-8")
+
+    assert "dockerfile: frontend-team-lead/Dockerfile" in compose
+    assert "COPY frontend-team-lead/package.json frontend-team-lead/pnpm-lock.yaml ./" in dockerfile
+    assert "COPY frontend-team-lead/ ./" in dockerfile
+    assert "COPY frontend-team-lead/nginx.conf" in dockerfile
