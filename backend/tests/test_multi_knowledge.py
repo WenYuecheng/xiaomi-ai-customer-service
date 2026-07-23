@@ -68,7 +68,10 @@ def test_chat_searches_multiple_libraries_and_reports_source_library(
     assert body["knowledge_base_id"] == core_id
     assert body["fallback"] is False
     assert any(source["knowledge_base_id"] == official_id for source in body["sources"])
-    assert any(source["knowledge_base_name"] == "小米中国官方完整知识库-多库测试" for source in body["sources"])
+    assert any(
+        source["knowledge_base_name"] == "小米中国官方完整知识库-多库测试"
+        for source in body["sources"]
+    )
     history = client.get(
         f"/api/v1/conversations/{body['conversation_id']}", headers=customer
     ).json()
@@ -98,9 +101,7 @@ def test_chat_rejects_conflicting_legacy_and_multi_library_selection(
 
 
 def test_explicit_new_phone_model_overrides_incompatible_robot_history() -> None:
-    apply_current_question_override = getattr(
-        chat_service, "apply_current_question_override", None
-    )
+    apply_current_question_override = getattr(chat_service, "apply_current_question_override", None)
     assert apply_current_question_override is not None
     analysis = QuestionAnalysis(
         intent="troubleshooting",

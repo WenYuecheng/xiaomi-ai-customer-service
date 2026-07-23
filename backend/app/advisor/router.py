@@ -36,6 +36,7 @@ from app.advisor.service import (
 )
 from app.auth.dependencies import CurrentUserDep
 from app.db.base import SessionDep
+from app.knowledge.selection import resolve_knowledge_base_ids
 
 router = APIRouter(prefix="/advisor", tags=["AI advisor"])
 
@@ -93,13 +94,18 @@ def create_advisor_session(
         AppError: 如果知识库不存在或敏感词校验未通过时抛出。
     """
     validate_sensitive_input(db, request.app.state.settings, current_user, payload.message)
+    knowledge_base_ids = resolve_knowledge_base_ids(
+        payload.knowledge_base_id, payload.knowledge_base_ids
+    )
     item = create_session_record(
         db,
         current_user,
-        payload.knowledge_base_id,
+        knowledge_base_ids,
         payload.category,
     )
-    overrides = payload.model_dump(exclude={"knowledge_base_id", "message", "stream"})
+    overrides = payload.model_dump(
+        exclude={"knowledge_base_id", "knowledge_base_ids", "message", "stream"}
+    )
     events = advisor_events(
         db,
         request.app.state.settings,

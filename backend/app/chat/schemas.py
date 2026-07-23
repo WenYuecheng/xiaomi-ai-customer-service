@@ -30,7 +30,8 @@ class ChatRequest(BaseModel):
         stream: 是否采用流式 SSE 返回。
     """
 
-    knowledge_base_id: str
+    knowledge_base_id: str | None = None
+    knowledge_base_ids: list[str] | None = Field(default=None, min_length=1, max_length=5)
     conversation_id: str | None = None
     message: str = Field(min_length=1, max_length=4000)
     stream: bool = False
@@ -53,6 +54,8 @@ class SourceResponse(BaseModel):
     snippet: str
     score: float
     source_url: str | None = None
+    knowledge_base_id: str | None = None
+    knowledge_base_name: str | None = None
 
 
 class AiTraceStep(BaseModel):
@@ -81,6 +84,8 @@ class ChatResponse(BaseModel):
     """
 
     conversation_id: str
+    knowledge_base_id: str
+    knowledge_base_ids: list[str]
     message_id: str
     run_id: str
     answer: str
@@ -121,6 +126,7 @@ class ConversationResponse(BaseModel):
 
     id: str
     knowledge_base_id: str
+    knowledge_base_ids: list[str]
     summary: str | None
     messages: list[MessageResponse]
 

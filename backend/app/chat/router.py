@@ -49,6 +49,7 @@ from app.db.models import (
     Message,
     MessageRole,
 )
+from app.knowledge.selection import link_ids, resolve_knowledge_base_ids
 
 router = APIRouter(tags=["chat"])
 
@@ -79,6 +80,10 @@ def build_chat_response(
     """
     return ChatResponse(
         conversation_id=conversation.id,
+        knowledge_base_id=conversation.knowledge_base_id,
+        knowledge_base_ids=link_ids(
+            conversation.knowledge_base_links, conversation.knowledge_base_id
+        ),
         message_id=message.id,
         run_id=run_id,
         answer=message.content,
@@ -119,12 +124,15 @@ def chat_completion(
     Returns:
         ChatResponse | StreamingResponse: 取决于是否开启流式传输。
     """
+    knowledge_base_ids = resolve_knowledge_base_ids(
+        payload.knowledge_base_id, payload.knowledge_base_ids
+    )
     if payload.stream:
         prepared = initialize_stream_chat(
             session,
             request.app.state.settings,
             current_user,
-            payload.knowledge_base_id,
+            knowledge_base_ids,
             payload.message,
             payload.conversation_id,
         )
@@ -142,7 +150,7 @@ def chat_completion(
             request.app.state.settings,
             request.app.state.worker.vector_store,
             current_user,
-            payload.knowledge_base_id,
+            knowledge_base_ids,
             payload.message,
             payload.conversation_id,
         )
@@ -170,6 +178,8 @@ def chat_completion(
                 "conversation_id": prepared.conversation.id,
                 "message_id": prepared.message.id,
                 "run_id": prepared.run_id,
+                "knowledge_base_id": prepared.knowledge_base_id,
+                "knowledge_base_ids": prepared.knowledge_base_ids,
             },
         )
         for step in stream_preparation_steps(
@@ -302,6 +312,9 @@ def conversation_history(
     return ConversationResponse(
         id=conversation.id,
         knowledge_base_id=conversation.knowledge_base_id,
+        knowledge_base_ids=link_ids(
+            conversation.knowledge_base_links, conversation.knowledge_base_id
+        ),
         summary=conversation.summary,
         messages=messages,
     )
