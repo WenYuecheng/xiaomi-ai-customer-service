@@ -90,6 +90,23 @@ def validate_signature(suffix: str, content: bytes) -> None:
         raise AppError(415, "invalid_file_signature", "文件内容与声明格式不匹配")
 
 
+def validate_media_type(suffix: str, media_type: str | None) -> None:
+    """校验声明 MIME，并兼容浏览器无法识别格式时的通用二进制类型。"""
+    allowed = {
+        ".pdf": {"application/pdf", "application/octet-stream"},
+        ".docx": {
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/zip",
+            "application/octet-stream",
+        },
+        ".txt": {"text/plain", "application/octet-stream"},
+        ".md": {"text/markdown", "text/plain", "application/octet-stream"},
+    }
+    declared = (media_type or "application/octet-stream").split(";", 1)[0].strip().lower()
+    if declared not in allowed[suffix]:
+        raise AppError(415, "invalid_media_type", "文件扩展名与 MIME 类型不匹配")
+
+
 @router.post("/documents/upload", status_code=status.HTTP_202_ACCEPTED)
 async def upload_document(
     request: Request,
@@ -140,6 +157,7 @@ async def upload_document(
     suffix = Path(name).suffix.lower()
     if suffix not in ALLOWED_SUFFIXES:
         raise AppError(415, "unsupported_file_type", "仅支持 PDF、DOCX、TXT 和 MD")
+    validate_media_type(suffix, file.content_type)
 
     content = await file.read(settings.max_upload_bytes + 1)
     if len(content) > settings.max_upload_bytes:

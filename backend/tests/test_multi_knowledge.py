@@ -1,4 +1,5 @@
 from io import BytesIO
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -7,6 +8,8 @@ from app.ingestion.parsers import extract_product_models
 from app.rag.providers import QuestionAnalysis
 from tests.conftest import auth_headers
 from tests.test_documents import wait_for_job
+
+UPLOAD_FIXTURES = Path(__file__).parents[2] / "data" / "upload-fixtures"
 
 
 def create_library(client: TestClient, headers: dict[str, str], name: str) -> str:
@@ -177,3 +180,35 @@ def test_chat_and_advisor_accept_five_library_scope(
     )
     assert advisor.status_code == 200, advisor.text
     assert advisor.json()["session"]["knowledge_base_ids"] == ids
+
+
+def test_all_retained_upload_fixtures_are_processed_and_chunked(
+    client: TestClient, users: dict[str, str]
+) -> None:
+    operator = auth_headers(client, "operator", users["operator"])
+    knowledge_base_id = create_library(client, operator, "文件上传验收库-自动化")
+    media_types = {
+        ".pdf": "application/pdf",
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".txt": "text/plain",
+        ".md": "text/markdown",
+    }
+    markers = {
+        ".pdf": "UPLOAD-PDF-20260723",
+        ".docx": "UPLOAD-DOCX-20260723",
+        ".txt": "UPLOAD-TXT-20260723",
+        ".md": "UPLOAD-MD-20260723",
+    }
+    for path in sorted(UPLOAD_FIXTURES.glob("upload-verification.*")):
+        response = client.post(
+            "/api/v1/documents/upload",
+            headers=operator,
+            data={"knowledge_base_id": knowledge_base_id},
+            files={"file": (path.name, BytesIO(path.read_bytes()), media_types[path.suffix])},
+        )
+        assert response.status_code == 202, response.text
+        assert wait_for_job(client, operator, response.json()["job_id"])["status"] == "succeeded"
+        chunks = client.get(
+            f"/api/v1/documents/{response.json()['document_id']}/chunks", headers=operator
+        ).json()["items"]
+        assert any(markers[path.suffix] in chunk["text"] for chunk in chunks)
