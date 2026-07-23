@@ -1,0 +1,66 @@
+:root {
+  --mi-orange: #ff6900;
+  --mi-orange-deep: #ea5a00;
+  --ink: #171717;
+  --ink-soft: #3d3d3d;
+  --ink-muted: #77736f;
+  --paper: #f6f5f3;
+  --surface: #ffffff;
+  --surface-soft: #f1f0ed;
+  --line: #e7e4df;
+  --success: #1b9a67;
+  --warning: #c77700;
+  --font-display: "MiSans", "HarmonyOS Sans SC", "PingFang SC", sans-serif;
+  --font-body: "MiSans", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, monospace;
+  --shadow-sm: 0 1px 2px rgba(28, 25, 23, .04), 0 8px 24px rgba(28, 25, 23, .04);
+  --shadow-lg: 0 28px 70px rgba(28, 25, 23, .12);
+  --el-color-primary: #ff6900;
+  --el-color-primary-light-3: #ff9550;
+  --el-color-primary-light-5: #ffb580;
+  --el-color-primary-light-8: #ffe7d5;
+  --el-color-primary-light-9: #fff4eb;
+  --el-border-radius-base: 10px;
+  --el-font-family: var(--font-body);
+}
+* { box-sizing: border-box; }
+html { background: var(--paper); color: var(--ink); font-family: var(--font-body); scroll-behavior: smooth; }
+body { background: var(--paper); margin: 0; min-width: 320px; min-height: 100vh; }
+body::before { background: radial-gradient(circle at 15% 0, rgba(255,105,0,.07), transparent 27rem); content: ""; inset: 0; pointer-events: none; position: fixed; }
+button, input, textarea { font: inherit; }
+button { touch-action: manipulation; }
+a { color: inherit; }
+h1, h2, h3, p { text-wrap: pretty; }
+h1, h2, h3 { font-family: var(--font-display); }
+:focus-visible { outline: 3px solid rgba(255,105,0,.24); outline-offset: 2px; }
+.el-card { --el-card-border-color: var(--line); border-radius: 18px !important; box-shadow: var(--shadow-sm) !important; }
+.el-button { font-weight: 650; }
+.el-button--primary { box-shadow: 0 8px 20px rgba(255,105,0,.18); }
+.el-input__wrapper, .el-select__wrapper, .el-textarea__inner { box-shadow: 0 0 0 1px var(--line) inset !important; }
+.el-input__wrapper.is-focus, .el-select__wrapper.is-focused, .el-textarea__inner:focus { box-shadow: 0 0 0 1px var(--mi-orange) inset !important; }
+.fade-transform-enter-active, .fade-transform-leave-active { transition: opacity .18s ease, transform .18s ease; }
+.fade-transform-enter-from { opacity: 0; transform: translateY(8px); }
+.fade-transform-leave-to { opacity: 0; transform: translateY(-6px); }
+@media (max-width: 760px) {
+  .el-table { background: transparent !important; }
+  .el-table__header-wrapper { display: none !important; }
+  .el-table__body, .el-table__body tbody, .el-table__body tr, .el-table__body td { display: block; width: 100% !important; }
+  .el-table__body tr { background: white; border: 1px solid var(--line); border-radius: 14px; margin-bottom: 12px; padding: 12px; box-shadow: var(--shadow-sm); }
+  .el-table__body td { border: 0 !important; display: flex; justify-content: space-between; padding: 7px 0 !important; text-align: right; }
+  .el-table__body td::before { color: var(--ink-muted); content: attr(data-label); font-size: 12px; font-weight: 650; padding-right: 12px; text-align: left; }
+  .el-table .cell { display: inline-flex; justify-content: flex-end; padding: 0 !important; width: auto !important; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; } }
+
+/* Minimal light-surface overrides for secondary drawers and legacy cards. */
+.drawer-layer { background: rgba(70, 64, 58, .14) !important; }
+.identity-drawer { background: #fbfaf8 !important; box-shadow: -20px 0 60px rgba(60, 52, 45, .12) !important; }
+.identity-drawer header span { color: var(--mi-orange) !important; }
+.identity-preview { background: #fff !important; border: 1px solid var(--line) !important; color: var(--ink) !important; }
+.identity-preview span { color: var(--ink-muted) !important; opacity: 1 !important; }
+.avatar-options button.selected { border-color: var(--mi-orange) !important; box-shadow: 0 0 0 3px rgba(255,105,0,.1) !important; }
+.timeline-card { background: #fff !important; border-color: var(--line) !important; border-radius: 18px !important; }
+.timeline-card header span { color: var(--mi-orange) !important; }
+.timeline button:hover { background: #fff8f2 !important; }
+.timeline button > i { background: #fff1e6 !important; border: 1px solid #ffd4b5 !important; color: var(--mi-orange) !important; }
+.timeline button > b { color: var(--mi-orange) !important; }
