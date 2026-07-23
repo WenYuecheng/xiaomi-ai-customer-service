@@ -34,12 +34,13 @@ def test_backend_container_runs_migrations_before_demo_initialization() -> None:
     assert preparation < migration < initialization
 
 
-def test_compose_builds_the_preserved_teammate_frontend() -> None:
+def test_compose_builds_the_canonical_teammate_frontend() -> None:
     project_root = Path(__file__).resolve().parents[2]
     compose = (project_root / "docker-compose.yml").read_text(encoding="utf-8")
-    dockerfile = (project_root / "frontend-team-lead/Dockerfile").read_text(encoding="utf-8")
+    dockerfile = (project_root / "frontend/Dockerfile").read_text(encoding="utf-8")
 
-    assert "dockerfile: frontend-team-lead/Dockerfile" in compose
-    assert "COPY frontend-team-lead/package.json frontend-team-lead/pnpm-lock.yaml ./" in dockerfile
-    assert "COPY frontend-team-lead/ ./" in dockerfile
-    assert "COPY frontend-team-lead/nginx.conf" in dockerfile
+    assert "dockerfile: frontend/Dockerfile" in compose
+    assert "COPY frontend/package.json frontend/pnpm-lock.yaml ./" in dockerfile
+    assert "COPY frontend/ ./" in dockerfile
+    assert "COPY frontend/nginx.conf" in dockerfile
+    assert not (project_root / "frontend-team-lead").exists()

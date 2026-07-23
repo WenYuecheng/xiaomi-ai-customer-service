@@ -24,6 +24,7 @@ vi.mock('@/api/chat', async (importOriginal) => {
 
 import ChatView from './ChatView.vue'
 import ChatComposer from '@/components/chat/ChatComposer.vue'
+import KnowledgeBaseMultiSelect from '@/components/knowledge/KnowledgeBaseMultiSelect.vue'
 import { ChatStreamError } from '@/api/chat'
 
 describe('ChatView ticket creation', () => {
@@ -185,5 +186,40 @@ describe('ChatView ticket creation', () => {
     expect(wrapper.findAll('.ai-trace__steps .is-generation')).toHaveLength(1)
     expect(wrapper.text()).toContain('生成完成')
     expect(wrapper.text()).toContain('42 ms')
+  })
+
+  it('starts a fresh request with the newly selected multi-library scope', async () => {
+    mocks.streamChat.mockImplementationOnce(async (_payload, handlers) => {
+      handlers.onMeta({ conversation_id: 'conversation-3', message_id: 'message-3', run_id: 'run-3' })
+      handlers.onDelta('跨库回答')
+      handlers.onSources([])
+      handlers.onDone({ fallback: false, transfer_suggested: false })
+    })
+    mocks.get.mockImplementation((url: string) => {
+      if (url === '/knowledge-bases') return Promise.resolve({ data: { items: [
+        { id: 'kb-1', name: '小米生态核心库', status: 'active' },
+        { id: 'kb-2', name: '小米中国官方完整知识库', status: 'active' },
+      ] } })
+      if (url === '/conversations/conversation-1') return Promise.resolve({ data: { knowledge_base_id: 'kb-1', messages: [] } })
+      if (url === '/operations/profile/me') return Promise.resolve({ data: {
+        product_preferences: [], intent_distribution: {}, feedback_summary: {}, event_count: 0,
+      } })
+      if (url === '/recommendations') return Promise.resolve({ data: { items: [], cold_start: true } })
+      throw new Error(`unexpected GET ${url}`)
+    })
+    const wrapper = mount(ChatView, { global: { stubs: { 'el-alert': true, 'el-button': true, 'el-option': true, 'el-select': true } } })
+    await flushPromises()
+
+    const selector = wrapper.findComponent(KnowledgeBaseMultiSelect)
+    selector.vm.$emit('update:modelValue', ['kb-1', 'kb-2'])
+    selector.vm.$emit('change', ['kb-1', 'kb-2'])
+    await flushPromises()
+    wrapper.findComponent(ChatComposer).vm.$emit('send', '跨库问题')
+    await flushPromises()
+
+    expect(mocks.streamChat.mock.calls[0][0]).toMatchObject({
+      knowledge_base_ids: ['kb-1', 'kb-2'],
+      conversation_id: undefined,
+    })
   })
 })

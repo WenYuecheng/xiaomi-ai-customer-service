@@ -28,6 +28,7 @@ from app.core.config import Settings
 from app.core.errors import AppError
 from app.db.models import (
     AdvisorSession,
+    AdvisorSessionKnowledgeBase,
     AdvisorTurn,
     BehaviorEvent,
     Document,
@@ -35,6 +36,7 @@ from app.db.models import (
     KnowledgeBase,
     User,
 )
+from app.knowledge.selection import link_ids, require_active_knowledge_bases
 from app.rag.providers import (
     AdvisorRequirements,
     ChatProvider,
@@ -90,6 +92,7 @@ def session_summary(item: AdvisorSession) -> AdvisorSessionSummary:
     return AdvisorSessionSummary(
         id=item.id,
         knowledge_base_id=item.knowledge_base_id,
+        knowledge_base_ids=link_ids(item.knowledge_base_links, item.knowledge_base_id),
         title=item.title,
         category=item.category,
         turn_count=len(item.turns),
@@ -162,7 +165,7 @@ def get_owned_session(session: Session, session_id: str, user: User) -> AdvisorS
 def create_session_record(
     session: Session,
     user: User,
-    knowledge_base_id: str,
+    knowledge_base_ids: list[str],
     category: str | None,
 ) -> AdvisorSession:
     """
@@ -180,15 +183,18 @@ def create_session_record(
     Raises:
         AppError: 如果指定的知识库不存在时抛出404错误。
     """
-    if not session.get(KnowledgeBase, knowledge_base_id):
-        raise AppError(404, "knowledge_base_not_found", "知识库不存在")
+    require_active_knowledge_bases(session, knowledge_base_ids)
     label = CATEGORY_LABELS.get(category or "", "产品")
     item = AdvisorSession(
         user_id=user.id,
-        knowledge_base_id=knowledge_base_id,
+        knowledge_base_id=knowledge_base_ids[0],
         category=category,
         title=f"{label} AI 选购方案",
     )
+    item.knowledge_base_links = [
+        AdvisorSessionKnowledgeBase(knowledge_base_id=item_id, ordinal=index)
+        for index, item_id in enumerate(knowledge_base_ids)
+    ]
     session.add(item)
     session.commit()
     session.refresh(item)
@@ -267,6 +273,8 @@ def _source_snapshot(session: Session, sources: list[RetrievedSource]) -> list[d
                 "snippet": source.snippet,
                 "score": source.score,
                 "source_url": document.source_url if document else None,
+                "knowledge_base_id": source.knowledge_base_id,
+                "knowledge_base_name": source.knowledge_base_name,
             }
         )
     return snapshots
@@ -366,7 +374,7 @@ def ground_plan(plan: dict, sources: list[dict]) -> dict:
 def create_chat_advisor_plan(
     db: Session,
     user: User,
-    knowledge_base_id: str,
+    knowledge_base_ids: list[str],
     question: str,
     analysis: QuestionAnalysis,
     provider: ChatProvider,
@@ -396,10 +404,14 @@ def create_chat_advisor_plan(
     )
     item = AdvisorSession(
         user_id=user.id,
-        knowledge_base_id=knowledge_base_id,
+        knowledge_base_id=knowledge_base_ids[0],
         category=requirements.category,
         title=f"{CATEGORY_LABELS.get(requirements.category or '', '产品')} AI 选购方案",
     )
+    item.knowledge_base_links = [
+        AdvisorSessionKnowledgeBase(knowledge_base_id=item_id, ordinal=index)
+        for index, item_id in enumerate(knowledge_base_ids)
+    ]
     snapshots = _source_snapshot(db, sources)
     evidence = []
     for source in sources:
@@ -488,7 +500,7 @@ def _merge_requirements(
 def retrieve_advisor_sources(
     db: Session,
     vector_store: VectorStoreService,
-    knowledge_base_id: str,
+    knowledge_base_id: str | list[str],
     query: str,
     product_models: list[str],
     threshold: float,
@@ -525,6 +537,7 @@ def retrieve_advisor_sources(
             top_k=12 if current_query == query else 6,
             threshold=threshold,
             require_lexical_overlap=require_lexical_overlap,
+            global_top_k=12,
         )
         for source in results:
             existing = source_by_id.get(source.chunk_id)
@@ -652,22 +665,36 @@ def advisor_events(
     requested_models = list(dict.fromkeys(requested_models))[:4]
 
     # 召回知识库内容
+    knowledge_base_ids = link_ids(
+        advisor_session.knowledge_base_links, advisor_session.knowledge_base_id
+    )
     candidates = retrieve_advisor_sources(
         db,
         vector_store,
-        advisor_session.knowledge_base_id,
+        knowledge_base_ids,
         query,
         requested_models,
         threshold=settings.similarity_threshold,
         require_lexical_overlap=settings.embedding_provider == "mock",
     )
+    library_counts = {knowledge_base_id: 0 for knowledge_base_id in knowledge_base_ids}
+    for source in candidates:
+        library_counts[source.knowledge_base_id] += 1
+    library_details = []
+    for knowledge_base_id in knowledge_base_ids:
+        knowledge_base = db.get(KnowledgeBase, knowledge_base_id)
+        library_details.append(
+            f"{knowledge_base.name if knowledge_base else knowledge_base_id}："
+            f"{library_counts[knowledge_base_id]} 条"
+        )
     trace[1] = AiTraceStep(
         stage="retrieval",
         status="completed",
         engine=retrieval_running.engine,
         model=retrieval_running.model,
         duration_ms=int((perf_counter() - started) * 1000),
-        summary=f"召回 {len(candidates)} 个候选知识片段",
+        summary=f"跨 {len(knowledge_base_ids)} 个知识库召回 {len(candidates)} 个候选片段",
+        details=library_details[:3],
     )
     _persist_trace(db, turn, trace)
     yield "trace", trace[1].model_dump()

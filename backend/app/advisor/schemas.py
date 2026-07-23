@@ -36,7 +36,8 @@ class AdvisorRequest(BaseModel):
     - stream: 是否流式返回响应
     """
 
-    knowledge_base_id: str
+    knowledge_base_id: str | None = None
+    knowledge_base_ids: list[str] | None = Field(default=None, min_length=1, max_length=5)
     message: str = Field(min_length=1, max_length=4000)
     mode: Literal["auto", "comparison", "purchase_advice"] = "auto"
     category: Literal["phone", "tablet", "wearable", "robot_vacuum"] | None = None
@@ -166,6 +167,7 @@ class AdvisorSessionSummary(BaseModel):
 
     id: str
     knowledge_base_id: str
+    knowledge_base_ids: list[str]
     title: str
     category: str | None
     turn_count: int

@@ -13,6 +13,7 @@
 支持普通聊天、查订单、选购顾问等多样化业务意图分流。
 """
 
+import re
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from time import perf_counter
@@ -28,6 +29,7 @@ from app.core.errors import AppError
 from app.db.models import (
     BehaviorEvent,
     Conversation,
+    ConversationKnowledgeBase,
     KnowledgeBase,
     Message,
     MessageRole,
@@ -35,6 +37,8 @@ from app.db.models import (
     MockOrder,
     User,
 )
+from app.ingestion.parsers import extract_product_models
+from app.knowledge.selection import link_ids, require_active_knowledge_bases
 from app.rag.providers import (
     ChatProvider,
     QuestionAnalysis,
@@ -67,7 +71,7 @@ class PreparedChat:
     """
 
     user: User
-    knowledge_base_id: str
+    knowledge_base_ids: list[str]
     original_question: str
     conversation: Conversation
     message: Message
@@ -85,6 +89,11 @@ class PreparedChat:
     advisor_session_id: str | None
     advisor_turn_id: str | None
     advisor_plan: dict | None
+
+    @property
+    def knowledge_base_id(self) -> str:
+        """首个知识库，供旧流程和旧客户端兼容。"""
+        return self.knowledge_base_ids[0]
 
 
 def classify_intent(text: str) -> str:
@@ -180,6 +189,31 @@ def fallback_analysis(question: str, conversation: Conversation) -> QuestionAnal
     )
 
 
+def apply_current_question_override(question: str, analysis: QuestionAnalysis) -> QuestionAnalysis:
+    """防止模型把本轮明确的新型号错误拼接到上一轮不兼容品类。"""
+    explicit_models = extract_product_models(question)
+    if not explicit_models:
+        return analysis
+    diagnostic_terms = ("无法", "故障", "排查", "开机", "报错", "怎么", "多少", "对比", "区别")
+    compact = re.sub(r"[\s，。！？?!、]", "", question)
+    if any(term in question for term in diagnostic_terms) or len(compact) > 20:
+        return analysis.model_copy(update={"product_models": explicit_models})
+    model = explicit_models[0]
+    display = re.sub(r"^小米\s*", "小米 ", model, flags=re.IGNORECASE)
+    display = re.sub(r"(\d+)([a-z])\b", lambda match: f"{match[1]}{match[2].upper()}", display)
+    display = re.sub(
+        r"\b(pro|ultra|max)\b", lambda match: match[1].title(), display, flags=re.IGNORECASE
+    )
+    return analysis.model_copy(
+        update={
+            "intent": "knowledge_query",
+            "rewritten_question": f"{display} 产品介绍",
+            "product_models": explicit_models,
+            "need_retrieval": True,
+        }
+    )
+
+
 def upsert_trace(prepared: PreparedChat, step: AiTraceStep) -> None:
     """
     更新或插入一条 AI 执行轨迹记录。
@@ -205,8 +239,35 @@ def persist_trace(session: Session, prepared: PreparedChat) -> None:
     session.commit()
 
 
+def message_source(message_id: str, source) -> MessageSource:
+    """只持久化来源快照字段，知识库信息由 document 关系实时提供。"""
+    return MessageSource(
+        message_id=message_id,
+        document_id=source.document_id,
+        chunk_id=source.chunk_id,
+        filename=source.filename,
+        location=source.location,
+        snippet=source.snippet,
+        score=source.score,
+    )
+
+
+def retrieval_scope_summary(
+    session: Session, knowledge_base_ids: list[str], sources: list
+) -> tuple[str, list[str]]:
+    """生成可审计的跨库召回统计，不暴露文档正文。"""
+    counts = {knowledge_base_id: 0 for knowledge_base_id in knowledge_base_ids}
+    for source in sources:
+        counts[source.knowledge_base_id] = counts.get(source.knowledge_base_id, 0) + 1
+    labels = []
+    for knowledge_base_id in knowledge_base_ids:
+        item = session.get(KnowledgeBase, knowledge_base_id)
+        labels.append(f"{item.name if item else knowledge_base_id}：{counts[knowledge_base_id]} 条")
+    return f"各库召回 {'；'.join(labels)}；全局候选 {len(sources)} 条", labels[:3]
+
+
 def get_or_create_conversation(
-    session: Session, user: User, knowledge_base_id: str, conversation_id: str | None
+    session: Session, user: User, knowledge_base_ids: list[str], conversation_id: str | None
 ) -> Conversation:
     """
     获取现有会话或创建新的会话。
@@ -223,16 +284,22 @@ def get_or_create_conversation(
     Returns:
         Conversation: 获取到或新创建的对话实体。
     """
-    if not session.get(KnowledgeBase, knowledge_base_id):
-        raise AppError(404, "knowledge_base_not_found", "知识库不存在")
+    require_active_knowledge_bases(session, knowledge_base_ids)
     if conversation_id:
         conversation = session.get(Conversation, conversation_id)
         if not conversation or conversation.user_id != user.id:
             raise AppError(404, "conversation_not_found", "会话不存在")
-        if conversation.knowledge_base_id != knowledge_base_id:
+        if (
+            link_ids(conversation.knowledge_base_links, conversation.knowledge_base_id)
+            != knowledge_base_ids
+        ):
             raise AppError(409, "conversation_knowledge_mismatch", "会话与知识库不匹配")
         return conversation
-    conversation = Conversation(user_id=user.id, knowledge_base_id=knowledge_base_id)
+    conversation = Conversation(user_id=user.id, knowledge_base_id=knowledge_base_ids[0])
+    conversation.knowledge_base_links = [
+        ConversationKnowledgeBase(knowledge_base_id=item_id, ordinal=index)
+        for index, item_id in enumerate(knowledge_base_ids)
+    ]
     session.add(conversation)
     session.flush()
     return conversation
@@ -259,7 +326,7 @@ def initialize_stream_chat(
     session: Session,
     settings: Settings,
     user: User,
-    knowledge_base_id: str,
+    knowledge_base_ids: list[str],
     question: str,
     conversation_id: str | None,
 ) -> PreparedChat:
@@ -292,7 +359,7 @@ def initialize_stream_chat(
         )
         session.commit()
         raise AppError(400, "sensitive_input", "输入包含不应提交的敏感凭据，请删除后重试")
-    conversation = get_or_create_conversation(session, user, knowledge_base_id, conversation_id)
+    conversation = get_or_create_conversation(session, user, knowledge_base_ids, conversation_id)
     recent_messages = [
         {"role": item.role.value, "content": item.content} for item in conversation.messages[-20:]
     ]
@@ -325,7 +392,8 @@ def initialize_stream_chat(
             "question": question,
             "intent": "knowledge_query",
             "fallback": True,
-            "knowledge_base_id": knowledge_base_id,
+            "knowledge_base_id": knowledge_base_ids[0],
+            "knowledge_base_ids": knowledge_base_ids,
             "ai_trace": [],
         },
     )
@@ -333,7 +401,7 @@ def initialize_stream_chat(
     session.commit()
     return PreparedChat(
         user=user,
-        knowledge_base_id=knowledge_base_id,
+        knowledge_base_ids=knowledge_base_ids,
         original_question=question,
         conversation=conversation,
         message=assistant_message,
@@ -397,6 +465,7 @@ def stream_preparation_steps(
             prepared.conversation.summary,
             prepared.recent_messages,
         )
+        analysis = apply_current_question_override(prepared.original_question, analysis)
         understanding = AiTraceStep(
             stage="understanding",
             status="completed",
@@ -466,11 +535,15 @@ def stream_preparation_steps(
         candidates = retrieve_sources(
             session,
             vector_store,
-            prepared.knowledge_base_id,
+            prepared.knowledge_base_ids,
             analysis.rewritten_question,
             settings.rerank_candidate_k,
             settings.similarity_threshold,
             require_lexical_overlap=settings.embedding_provider == "mock",
+            global_top_k=12,
+        )
+        retrieval_summary, retrieval_details = retrieval_scope_summary(
+            session, prepared.knowledge_base_ids, candidates
         )
         retrieval_completed = AiTraceStep(
             stage="retrieval",
@@ -478,7 +551,8 @@ def stream_preparation_steps(
             engine="BGE" if settings.embedding_provider == "bge" else "Embedding",
             model=settings.embedding_model,
             duration_ms=int((perf_counter() - retrieval_started) * 1000),
-            summary=f"召回 {len(candidates)} 个候选知识片段",
+            summary=retrieval_summary,
+            details=retrieval_details,
         )
         upsert_trace(prepared, retrieval_completed)
         persist_trace(session, prepared)
@@ -542,9 +616,7 @@ def stream_preparation_steps(
     prepared.conversation.consecutive_fallbacks = (
         prepared.conversation.consecutive_fallbacks + 1 if fallback else 0
     )
-    source_models = [
-        MessageSource(message_id=prepared.message.id, **source.__dict__) for source in selected
-    ]
+    source_models = [message_source(prepared.message.id, source) for source in selected]
     session.add_all(source_models)
     prepared.sources = source_models
     generation = AiTraceStep(
@@ -596,7 +668,7 @@ def prepare_chat(
     settings: Settings,
     vector_store: VectorStoreService,
     user: User,
-    knowledge_base_id: str,
+    knowledge_base_ids: list[str],
     question: str,
     conversation_id: str | None,
 ) -> PreparedChat:
@@ -612,7 +684,7 @@ def prepare_chat(
         )
         session.commit()
         raise AppError(400, "sensitive_input", "输入包含不应提交的敏感凭据，请删除后重试")
-    conversation = get_or_create_conversation(session, user, knowledge_base_id, conversation_id)
+    conversation = get_or_create_conversation(session, user, knowledge_base_ids, conversation_id)
     recent_messages = [
         {"role": item.role.value, "content": item.content} for item in conversation.messages[-20:]
     ]
@@ -622,6 +694,7 @@ def prepare_chat(
     analysis_started = perf_counter()
     try:
         analysis = provider.analyze(question, conversation.summary, recent_messages)
+        analysis = apply_current_question_override(question, analysis)
         understanding_status = "completed"
         understanding_summary = (
             f"识别意图：{INTENT_LABELS[analysis.intent]}；检索问题：{analysis.rewritten_question}"
@@ -658,11 +731,15 @@ def prepare_chat(
         sources = retrieve_sources(
             session,
             vector_store,
-            knowledge_base_id,
+            knowledge_base_ids,
             analysis.rewritten_question,
             settings.rerank_candidate_k,
             settings.similarity_threshold,
             require_lexical_overlap=settings.embedding_provider == "mock",
+            global_top_k=12,
+        )
+        retrieval_summary, retrieval_details = retrieval_scope_summary(
+            session, knowledge_base_ids, sources
         )
         trace.append(
             AiTraceStep(
@@ -671,7 +748,8 @@ def prepare_chat(
                 engine="BGE" if settings.embedding_provider == "bge" else "Embedding",
                 model=settings.embedding_model,
                 duration_ms=int((perf_counter() - retrieval_started) * 1000),
-                summary=f"召回 {len(sources)} 个可靠知识片段",
+                summary=retrieval_summary,
+                details=retrieval_details,
             )
         )
         if sources:
@@ -775,9 +853,7 @@ def prepare_chat(
     )
     session.add(assistant_message)
     session.flush()
-    source_models = [
-        MessageSource(message_id=assistant_message.id, **source.__dict__) for source in sources
-    ]
+    source_models = [message_source(assistant_message.id, source) for source in sources]
     session.add_all(source_models)
     trace.append(
         AiTraceStep(
@@ -807,7 +883,8 @@ def prepare_chat(
             "question": question,
             "intent": assistant_message.intent,
             "fallback": fallback,
-            "knowledge_base_id": knowledge_base_id,
+            "knowledge_base_id": knowledge_base_ids[0],
+            "knowledge_base_ids": knowledge_base_ids,
             "ai_trace": [step.model_dump() for step in trace],
         },
     )
@@ -815,7 +892,7 @@ def prepare_chat(
     session.commit()
     return PreparedChat(
         user=user,
-        knowledge_base_id=knowledge_base_id,
+        knowledge_base_ids=knowledge_base_ids,
         original_question=question,
         conversation=conversation,
         message=assistant_message,
@@ -875,7 +952,7 @@ def stream_prepared_chat(
             advisor_session_id, advisor_turn_id, plan = create_chat_advisor_plan(
                 session,
                 prepared.user,
-                prepared.knowledge_base_id,
+                prepared.knowledge_base_ids,
                 prepared.original_question,
                 prepared.analysis,
                 prepared.provider,
@@ -999,7 +1076,7 @@ def complete_chat(
     settings: Settings,
     vector_store: VectorStoreService,
     user: User,
-    knowledge_base_id: str,
+    knowledge_base_ids: list[str],
     question: str,
     conversation_id: str | None,
 ) -> tuple[
@@ -1016,7 +1093,7 @@ def complete_chat(
         settings,
         vector_store,
         user,
-        knowledge_base_id,
+        knowledge_base_ids,
         question,
         conversation_id,
     )
@@ -1027,7 +1104,7 @@ def complete_chat(
                 advisor_session_id, advisor_turn_id, plan = create_chat_advisor_plan(
                     session,
                     prepared.user,
-                    prepared.knowledge_base_id,
+                    prepared.knowledge_base_ids,
                     prepared.original_question,
                     prepared.analysis,
                     prepared.provider,

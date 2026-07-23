@@ -42,7 +42,7 @@
 | EP05-04 密钥配置 | Settings/`.env.example` | 敏感信息扫描 |
 | EP05-05 敏感输入 | 长度、文件、敏感词与审计 | blocked input 测试 |
 | EP06-01 标准回归集 | `questions.csv`、评测脚本 | 30/30，100% |
-| EP06-02 核心测试 | pytest/Vitest | 后端 56、前端 28，覆盖率 89% |
+| EP06-02 核心测试 | pytest/Vitest | 后端 76、前端 33，覆盖率 90% |
 | EP06-03 Compose MVP | 两个 Dockerfile、Compose | 前后端镜像构建通过，后端 healthy、前端 running |
 | EP06-04 README/API | README、Swagger、数据库文档 | 本地端到端启动验证 |
 | EP06-05 Jira 归档 | `jira/README.md`、本矩阵 | 单人真实证据流程 |

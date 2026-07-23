@@ -16,7 +16,7 @@ import jieba
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import Document, DocumentChunk
+from app.db.models import Document, DocumentChunk, KnowledgeBase
 from app.ingestion.parsers import extract_product_models
 from app.rag.vector_store import VectorStoreService
 
@@ -52,9 +52,13 @@ class RetrievedSource:
     location: str
     snippet: str
     score: float
+    knowledge_base_id: str = ""
+    knowledge_base_name: str = ""
 
 
-def requested_product_models(session: Session, knowledge_base_id: str, query: str) -> set[str]:
+def requested_product_models(
+    session: Session, knowledge_base_ids: list[str], query: str
+) -> set[str]:
     """Resolve an explicit query model against generic entities stored in the library."""
     if extracted := set(extract_product_models(query)):
         return extracted
@@ -64,7 +68,7 @@ def requested_product_models(session: Session, knowledge_base_id: str, query: st
         model
         for models in session.scalars(
             select(DocumentChunk.product_models).where(
-                DocumentChunk.knowledge_base_id == knowledge_base_id
+                DocumentChunk.knowledge_base_id.in_(knowledge_base_ids)
             )
         )
         for model in models
@@ -129,11 +133,12 @@ def lexical_score(query: str, text: str) -> float:
 def retrieve_sources(
     session: Session,
     vector_store: VectorStoreService,
-    knowledge_base_id: str,
+    knowledge_base_id: str | list[str],
     query: str,
     top_k: int,
     threshold: float,
     require_lexical_overlap: bool,
+    global_top_k: int | None = None,
 ) -> list[RetrievedSource]:
     """
     执行基于给定查询语句的文档分块混合检索。
@@ -161,56 +166,61 @@ def retrieve_sources(
     Returns:
         包含片段详情的 `RetrievedSource` 对象列表，按融合得分降序排列。
     """
-    # 1. 向下层向量库发起粗排检索请求，扩大 K 值以保留足够样本供后置清洗。
-    results = vector_store.collection(knowledge_base_id).similarity_search_with_score(
-        query, k=max(top_k * 5, 20)
+    knowledge_base_ids = (
+        [knowledge_base_id] if isinstance(knowledge_base_id, str) else knowledge_base_id
     )
-
-    requested_models = requested_product_models(session, knowledge_base_id, query)
+    requested_models = requested_product_models(session, knowledge_base_ids, query)
     sources: list[RetrievedSource] = []
-
-    for langchain_document, distance in results:
-        chunk_id = langchain_document.metadata.get("chunk_id")
-        chunk = session.get(DocumentChunk, chunk_id)
-        if not chunk:
+    for current_kb_id in knowledge_base_ids:
+        knowledge_base = session.get(KnowledgeBase, current_kb_id)
+        if not knowledge_base:
             continue
-
-        # 2. 型号硬过滤：如果用户提到特定型号，且该块不包含此型号，跳过。
-        exact_model_match = bool(requested_models.intersection(chunk.product_models))
-        if requested_models and not exact_model_match:
-            continue
-
-        # 3. 计算文本重合度
-        lexical = lexical_score(query, chunk.text)
-        vector_score = 1 - float(distance)
-
-        # 4. 加权合成最终分数
-        blended = vector_score * 0.7 + lexical * 0.3
-
-        # 防止强词汇匹配在向量模型下由于离线哈希被埋没
-        score = max(0.0, min(1.0, max(blended, lexical)))
-
-        if exact_model_match and lexical > 0:
-            score = max(score, threshold)
-
-        if score < threshold or (require_lexical_overlap and lexical == 0):
-            continue
-
-        # 填充来源文档信息以供呈现
-        document = session.get(Document, chunk.document_id)
-        if not document:
-            continue
-
-        sources.append(
-            RetrievedSource(
-                document_id=document.id,
-                chunk_id=chunk.id,
-                filename=document.original_filename,
-                location=chunk.location,
-                snippet=chunk.text,
-                score=round(score, 4),
-            )
+        results = vector_store.collection(current_kb_id).similarity_search_with_score(
+            query, k=max(top_k * 5, 20)
         )
 
-    # 5. 再次对处理后的结果重排并截断最终期望的 top_k。
-    return sorted(sources, key=lambda item: item.score, reverse=True)[:top_k]
+        library_sources: list[RetrievedSource] = []
+        for langchain_document, distance in results:
+            chunk_id = langchain_document.metadata.get("chunk_id")
+            chunk = session.get(DocumentChunk, chunk_id)
+            if not chunk or chunk.knowledge_base_id != current_kb_id:
+                continue
+
+            exact_model_match = bool(requested_models.intersection(chunk.product_models))
+            if requested_models and not exact_model_match:
+                continue
+
+            lexical = lexical_score(query, chunk.text)
+            vector_score = 1 - float(distance)
+
+            blended = vector_score * 0.7 + lexical * 0.3
+
+            score = max(0.0, min(1.0, max(blended, lexical)))
+
+            if exact_model_match and lexical > 0:
+                score = max(score, threshold)
+
+            if score < threshold or (require_lexical_overlap and lexical == 0):
+                continue
+
+            document = session.get(Document, chunk.document_id)
+            if not document:
+                continue
+
+            library_sources.append(
+                RetrievedSource(
+                    document_id=document.id,
+                    chunk_id=chunk.id,
+                    filename=document.original_filename,
+                    location=chunk.location,
+                    snippet=chunk.text,
+                    score=round(score, 4),
+                    knowledge_base_id=current_kb_id,
+                    knowledge_base_name=knowledge_base.name,
+                )
+            )
+        sources.extend(sorted(library_sources, key=lambda item: item.score, reverse=True)[:top_k])
+
+    source_by_chunk = {source.chunk_id: source for source in sources}
+    limit = global_top_k if global_top_k is not None else top_k
+    return sorted(source_by_chunk.values(), key=lambda item: item.score, reverse=True)[:limit]

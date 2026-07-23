@@ -23,7 +23,7 @@ async function render(): Promise<void> {
   const range = dates.length ? [dates[0], dates[dates.length - 1]] : undefined
   chart.setOption({
     tooltip: { formatter: (item: { value: [string, number] }) => `${item.value[0]}：${item.value[1]} 次咨询` },
-    visualMap: { min: 0, max: Math.max(...props.heatmap.map((item) => item.count), 1), orient: 'horizontal', left: 'center', bottom: 0, inRange: { color: ['#f0ebff','#ab86f4','#6e4be6'] }, text: ['多','少'], textStyle: { color: '#6d6680' } },
+    visualMap: { min: 0, max: Math.max(...props.heatmap.map((item) => item.count), 1), orient: 'horizontal', left: 'center', bottom: 0, inRange: { color: ['#fff0e5','#ffac70','#ff6900'] }, text: ['多','少'], textStyle: { color: '#77736f' } },
     calendar: { top: 20, left: 35, right: 20, bottom: 45, range, cellSize: ['auto', 20], itemStyle: { borderWidth: 4, borderColor: '#fff', borderRadius: 5 }, yearLabel: { show: false }, dayLabel: { firstDay: 1, nameMap: 'ZH' }, monthLabel: { nameMap: 'ZH' } },
     animationDuration: 1500,
     animationEasing: 'quinticInOut',
@@ -44,7 +44,7 @@ onBeforeUnmount(() => { observer?.disconnect(); chart?.dispose() })
 </template>
 
 <style scoped>
-.topic-visualization { background: rgba(255,255,255,.84); border: 1px solid #e6e1f2; border-radius: 24px; padding: 22px; }.visual-title { align-items: end; display: flex; justify-content: space-between; }.visual-title span { color: #7658dc; font-family: var(--font-mono); font-size: 10px; letter-spacing: .13em; }.visual-title h2 { font-size: 22px; margin: 6px 0 0; }.visual-title p { color: var(--ink-muted); font-size: 11px; margin: 0; }.topic-cloud { align-items: center; display: flex; flex-wrap: wrap; gap: 10px 15px; justify-content: center; min-height: 170px; padding: 20px 8px; }.topic-cloud > span { cursor: default; font-weight: 720; line-height: 1; transition: opacity .18s ease, transform .18s ease; }.topic-cloud > span:hover { opacity: .72; transform: scale(1.06); }.topic-cloud small { font-size: 9px; margin-left: 4px; opacity: .5; }.tone-0{color:#704fe3}.tone-1{color:#d34da0}.tone-2{color:#247fbd}.tone-3{color:#ef7a45}.tone-4{color:#338f75}.heatmap { height: 170px; width: 100%; }
+.topic-visualization{background:#fff;border:1px solid var(--line);border-radius:18px;padding:22px}.visual-title{align-items:flex-end;display:flex;justify-content:space-between}.visual-title span{color:var(--mi-orange);font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:.13em}.visual-title h2{font-size:22px;margin:6px 0 0}.visual-title p{color:var(--ink-muted);font-size:11px;margin:0}.topic-cloud{align-items:center;background:#faf9f7;border-radius:14px;display:flex;flex-wrap:wrap;gap:10px 15px;justify-content:center;margin-top:16px;min-height:170px;padding:20px 8px}.topic-cloud>span{cursor:default;font-weight:720;line-height:1;transition:opacity .18s ease,transform .18s ease}.topic-cloud>span:hover{opacity:.72;transform:scale(1.06)}.topic-cloud small{font-size:9px;margin-left:4px;opacity:.5}.tone-0{color:#d95a06}.tone-1{color:#202020}.tone-2{color:#247fbd}.tone-3{color:#b78218}.tone-4{color:#338f75}.heatmap{height:170px;width:100%}
 @media(max-width:700px){.visual-title{align-items:start;flex-direction:column;gap:8px}.heatmap{height:190px}}
 @media(prefers-reduced-motion:reduce){.topic-cloud>span{transition:none}}
 </style>

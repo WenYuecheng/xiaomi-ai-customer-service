@@ -40,7 +40,7 @@ describe('ProfileView', () => {
     })
     await flushPromises()
 
-    expect(wrapper.text()).toContain('AI 数字空间')
+    expect(wrapper.text()).toContain('个人中心')
     expect(wrapper.text()).toContain('12')
     expect(wrapper.text()).toContain('小米 14')
     expect(wrapper.text()).toContain('小米 14 的续航怎么样？')

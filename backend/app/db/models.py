@@ -241,6 +241,26 @@ class Conversation(Base):
     messages: Mapped[list["Message"]] = relationship(
         back_populates="conversation", cascade="all, delete-orphan", order_by="Message.created_at"
     )
+    knowledge_base_links: Mapped[list["ConversationKnowledgeBase"]] = relationship(
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        order_by="ConversationKnowledgeBase.ordinal",
+    )
+
+
+class ConversationKnowledgeBase(Base):
+    """会话可检索知识库范围，ordinal 保留用户选择顺序。"""
+
+    __tablename__ = "conversation_knowledge_bases"
+
+    conversation_id: Mapped[str] = mapped_column(ForeignKey("conversations.id"), primary_key=True)
+    knowledge_base_id: Mapped[str] = mapped_column(
+        ForeignKey("knowledge_bases.id"), primary_key=True
+    )
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    conversation: Mapped[Conversation] = relationship(back_populates="knowledge_base_links")
+    knowledge_base: Mapped[KnowledgeBase] = relationship()
 
 
 class Message(Base):
@@ -294,6 +314,14 @@ class MessageSource(Base):
     def source_url(self) -> str | None:
         """获取原始文档的引用链接。"""
         return self.document.source_url
+
+    @property
+    def knowledge_base_id(self) -> str:
+        return self.document.knowledge_base_id
+
+    @property
+    def knowledge_base_name(self) -> str:
+        return self.document.knowledge_base.name
 
 
 class FeedbackRating(StrEnum):
@@ -420,6 +448,28 @@ class AdvisorSession(Base):
         cascade="all, delete-orphan",
         order_by="AdvisorTurn.sequence_no",
     )
+    knowledge_base_links: Mapped[list["AdvisorSessionKnowledgeBase"]] = relationship(
+        back_populates="advisor_session",
+        cascade="all, delete-orphan",
+        order_by="AdvisorSessionKnowledgeBase.ordinal",
+    )
+
+
+class AdvisorSessionKnowledgeBase(Base):
+    """AI 选购会话创建时固定的多知识库范围。"""
+
+    __tablename__ = "advisor_session_knowledge_bases"
+
+    advisor_session_id: Mapped[str] = mapped_column(
+        ForeignKey("advisor_sessions.id"), primary_key=True
+    )
+    knowledge_base_id: Mapped[str] = mapped_column(
+        ForeignKey("knowledge_bases.id"), primary_key=True
+    )
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    advisor_session: Mapped[AdvisorSession] = relationship(back_populates="knowledge_base_links")
+    knowledge_base: Mapped[KnowledgeBase] = relationship()
 
 
 class AdvisorTurn(Base):

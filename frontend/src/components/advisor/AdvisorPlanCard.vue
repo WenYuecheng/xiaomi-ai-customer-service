@@ -70,3 +70,6 @@ const scoreTone = (score: number): string => score >= 85 ? 'excellent' : score >
 @media (max-width: 760px) { .candidate-grid,.analysis-grid { grid-template-columns: 1fr; }.plan-heading { flex-direction: column; }.trust-mark { align-self: stretch; justify-content: center; }.advisor-plan { padding: 17px; } }
 @media (prefers-reduced-motion: reduce) { .candidate-card { transition: none; } }
 </style>
+<style scoped>
+.trust-mark{background:#f7f6f3;border:1px solid var(--line);color:var(--ink)}.trust-mark b{color:var(--success)}.recommendation-panel{background:#fff7f1;border-color:#ffd9bc;color:var(--ink)}.recommendation-panel>span{color:var(--mi-orange)}.recommendation-panel p,.recommendation-panel li{color:var(--ink-soft)}.caveats{border-top-color:#f0d9c8;color:var(--ink-muted)}.radar-panel{background:#fff;border-color:var(--line)}
+</style>
