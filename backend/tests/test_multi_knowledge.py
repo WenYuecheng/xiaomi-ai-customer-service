@@ -1,9 +1,14 @@
 from io import BytesIO
 from pathlib import Path
 
+import pytest
+from alembic.config import Config
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, text
 
 import app.chat.service as chat_service
+from alembic import command
+from app.core.config import get_settings
 from app.ingestion.parsers import extract_product_models
 from app.rag.providers import QuestionAnalysis
 from tests.conftest import auth_headers
@@ -212,3 +217,66 @@ def test_all_retained_upload_fixtures_are_processed_and_chunked(
             f"/api/v1/documents/{response.json()['document_id']}/chunks", headers=operator
         ).json()["items"]
         assert any(markers[path.suffix] in chunk["text"] for chunk in chunks)
+
+
+def test_alembic_backfills_legacy_chat_and_advisor_scopes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database_path = tmp_path / "legacy.db"
+    database_url = f"sqlite:///{database_path}"
+    project_root = Path(__file__).parents[2]
+    config = Config(str(project_root / "backend" / "alembic.ini"))
+    config.set_main_option("script_location", str(project_root / "backend" / "alembic"))
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    get_settings.cache_clear()
+    command.upgrade(config, "3c7d9a2e4f10")
+    engine = create_engine(database_url)
+    now = "2026-07-23 00:00:00"
+    with engine.begin() as connection:
+        connection.execute(
+            text("""INSERT INTO users
+            (id, username, display_name, avatar_key, password_hash, role, is_active,
+             token_version, created_at)
+            VALUES ('u1', 'legacy', 'legacy', 'aurora', 'hash', 'user', 1, 0, :now)"""),
+            {"now": now},
+        )
+        connection.execute(
+            text("""INSERT INTO knowledge_bases
+            (id, name, description, status, embedding_model, owner_id, created_at, updated_at)
+            VALUES ('kb1', '旧知识库', NULL, 'active', 'mock', 'u1', :now, :now)"""),
+            {"now": now},
+        )
+        connection.execute(
+            text("""INSERT INTO conversations
+            (id, user_id, knowledge_base_id, summary, summary_message_count,
+             consecutive_fallbacks, created_at, updated_at)
+            VALUES ('c1', 'u1', 'kb1', NULL, 0, 0, :now, :now)"""),
+            {"now": now},
+        )
+        connection.execute(
+            text("""INSERT INTO advisor_sessions
+            (id, user_id, knowledge_base_id, title, category, created_at, updated_at)
+            VALUES ('a1', 'u1', 'kb1', '旧方案', 'phone', :now, :now)"""),
+            {"now": now},
+        )
+    command.upgrade(config, "head")
+    with engine.connect() as connection:
+        assert (
+            connection.execute(
+                text(
+                    """SELECT knowledge_base_id FROM conversation_knowledge_bases
+                    WHERE conversation_id='c1'"""
+                )
+            ).scalar_one()
+            == "kb1"
+        )
+        assert (
+            connection.execute(
+                text(
+                    """SELECT knowledge_base_id FROM advisor_session_knowledge_bases
+                    WHERE advisor_session_id='a1'"""
+                )
+            ).scalar_one()
+            == "kb1"
+        )
+    get_settings.cache_clear()
