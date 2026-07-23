@@ -85,7 +85,10 @@ def load_sections(path: Path) -> list[ParsedSection]:
 
 
 PRODUCT_MODEL_PATTERNS = (
-    re.compile(r"(?:小米|Xiaomi)\s*(\d+(?:\s*(?:Pro|Ultra|Max))?)", re.IGNORECASE),
+    re.compile(
+        r"(?:小米|Xiaomi)\s*(\d+[A-Za-z]?(?:\s*(?:Pro|Ultra|Max))?)",
+        re.IGNORECASE,
+    ),
     re.compile(r"(?:红米|Redmi)\s*([A-Za-z]*\s*\d+(?:\s*(?:Pro|Ultra|Max))?)", re.IGNORECASE),
     re.compile(r"Smart\s+Band\s*(\d+(?:\s*Pro)?)", re.IGNORECASE),
     re.compile(r"Robot\s+Vacuum\s*(\d+(?:\s*Pro)?)", re.IGNORECASE),

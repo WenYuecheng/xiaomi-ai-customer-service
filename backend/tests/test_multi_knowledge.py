@@ -3,6 +3,7 @@ from io import BytesIO
 from fastapi.testclient import TestClient
 
 import app.chat.service as chat_service
+from app.ingestion.parsers import extract_product_models
 from app.rag.providers import QuestionAnalysis
 from tests.conftest import auth_headers
 from tests.test_documents import wait_for_job
@@ -116,3 +117,63 @@ def test_explicit_new_phone_model_overrides_incompatible_robot_history() -> None
     assert guarded.intent == "knowledge_query"
     assert guarded.rewritten_question == "小米 17T 产品介绍"
     assert guarded.product_models == ["小米 17t"]
+
+
+def test_17t_variants_are_normalized_without_truncating_suffix() -> None:
+    assert extract_product_models("小米17T") == ["小米 17t"]
+    assert extract_product_models("小米 17T Pro") == ["小米 17t pro"]
+    assert extract_product_models("Xiaomi 17T") == ["小米 17t"]
+
+
+def test_duplicate_selection_is_deduplicated_and_inactive_library_is_rejected(
+    client: TestClient, users: dict[str, str]
+) -> None:
+    operator = auth_headers(client, "operator", users["operator"])
+    knowledge_base_id = create_library(client, operator, "多库去重测试")
+    customer = auth_headers(client, "customer", users["customer"])
+
+    response = client.post(
+        "/api/v1/chat/completions",
+        headers=customer,
+        json={"knowledge_base_ids": [knowledge_base_id, knowledge_base_id], "message": "无结果"},
+    )
+    assert response.status_code == 200
+    assert response.json()["knowledge_base_ids"] == [knowledge_base_id]
+
+    update = client.patch(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}",
+        headers=operator,
+        json={"status": "archived"},
+    )
+    assert update.status_code == 200
+    rejected = client.post(
+        "/api/v1/chat/completions",
+        headers=customer,
+        json={"knowledge_base_ids": [knowledge_base_id], "message": "不能查询停用库"},
+    )
+    assert rejected.status_code == 409
+    assert rejected.json()["error"]["code"] == "knowledge_base_inactive"
+
+
+def test_chat_and_advisor_accept_five_library_scope(
+    client: TestClient, users: dict[str, str]
+) -> None:
+    operator = auth_headers(client, "operator", users["operator"])
+    ids = [create_library(client, operator, f"五库范围-{index}") for index in range(5)]
+    customer = auth_headers(client, "customer", users["customer"])
+
+    chat = client.post(
+        "/api/v1/chat/completions",
+        headers=customer,
+        json={"knowledge_base_ids": ids, "message": "知识范围测试"},
+    )
+    assert chat.status_code == 200, chat.text
+    assert chat.json()["knowledge_base_ids"] == ids
+
+    advisor = client.post(
+        "/api/v1/advisor/sessions",
+        headers=customer,
+        json={"knowledge_base_ids": ids, "message": "帮我选购手机"},
+    )
+    assert advisor.status_code == 200, advisor.text
+    assert advisor.json()["session"]["knowledge_base_ids"] == ids

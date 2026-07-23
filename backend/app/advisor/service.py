@@ -33,6 +33,7 @@ from app.db.models import (
     BehaviorEvent,
     Document,
     DocumentChunk,
+    KnowledgeBase,
     User,
 )
 from app.knowledge.selection import link_ids, require_active_knowledge_bases
@@ -676,13 +677,24 @@ def advisor_events(
         threshold=settings.similarity_threshold,
         require_lexical_overlap=settings.embedding_provider == "mock",
     )
+    library_counts = {knowledge_base_id: 0 for knowledge_base_id in knowledge_base_ids}
+    for source in candidates:
+        library_counts[source.knowledge_base_id] += 1
+    library_details = []
+    for knowledge_base_id in knowledge_base_ids:
+        knowledge_base = db.get(KnowledgeBase, knowledge_base_id)
+        library_details.append(
+            f"{knowledge_base.name if knowledge_base else knowledge_base_id}："
+            f"{library_counts[knowledge_base_id]} 条"
+        )
     trace[1] = AiTraceStep(
         stage="retrieval",
         status="completed",
         engine=retrieval_running.engine,
         model=retrieval_running.model,
         duration_ms=int((perf_counter() - started) * 1000),
-        summary=f"召回 {len(candidates)} 个候选知识片段",
+        summary=f"跨 {len(knowledge_base_ids)} 个知识库召回 {len(candidates)} 个候选片段",
+        details=library_details[:3],
     )
     _persist_trace(db, turn, trace)
     yield "trace", trace[1].model_dump()

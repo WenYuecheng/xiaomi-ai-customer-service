@@ -30,6 +30,7 @@ from app.db.models import (
     BehaviorEvent,
     Conversation,
     ConversationKnowledgeBase,
+    KnowledgeBase,
     Message,
     MessageRole,
     MessageSource,
@@ -249,6 +250,20 @@ def message_source(message_id: str, source) -> MessageSource:
         snippet=source.snippet,
         score=source.score,
     )
+
+
+def retrieval_scope_summary(
+    session: Session, knowledge_base_ids: list[str], sources: list
+) -> tuple[str, list[str]]:
+    """生成可审计的跨库召回统计，不暴露文档正文。"""
+    counts = {knowledge_base_id: 0 for knowledge_base_id in knowledge_base_ids}
+    for source in sources:
+        counts[source.knowledge_base_id] = counts.get(source.knowledge_base_id, 0) + 1
+    labels = []
+    for knowledge_base_id in knowledge_base_ids:
+        item = session.get(KnowledgeBase, knowledge_base_id)
+        labels.append(f"{item.name if item else knowledge_base_id}：{counts[knowledge_base_id]} 条")
+    return f"各库召回 {'；'.join(labels)}；全局候选 {len(sources)} 条", labels[:3]
 
 
 def get_or_create_conversation(
@@ -527,13 +542,17 @@ def stream_preparation_steps(
             require_lexical_overlap=settings.embedding_provider == "mock",
             global_top_k=12,
         )
+        retrieval_summary, retrieval_details = retrieval_scope_summary(
+            session, prepared.knowledge_base_ids, candidates
+        )
         retrieval_completed = AiTraceStep(
             stage="retrieval",
             status="completed",
             engine="BGE" if settings.embedding_provider == "bge" else "Embedding",
             model=settings.embedding_model,
             duration_ms=int((perf_counter() - retrieval_started) * 1000),
-            summary=f"召回 {len(candidates)} 个候选知识片段",
+            summary=retrieval_summary,
+            details=retrieval_details,
         )
         upsert_trace(prepared, retrieval_completed)
         persist_trace(session, prepared)
@@ -719,6 +738,9 @@ def prepare_chat(
             require_lexical_overlap=settings.embedding_provider == "mock",
             global_top_k=12,
         )
+        retrieval_summary, retrieval_details = retrieval_scope_summary(
+            session, knowledge_base_ids, sources
+        )
         trace.append(
             AiTraceStep(
                 stage="retrieval",
@@ -726,7 +748,8 @@ def prepare_chat(
                 engine="BGE" if settings.embedding_provider == "bge" else "Embedding",
                 model=settings.embedding_model,
                 duration_ms=int((perf_counter() - retrieval_started) * 1000),
-                summary=f"召回 {len(sources)} 个可靠知识片段",
+                summary=retrieval_summary,
+                details=retrieval_details,
             )
         )
         if sources:
