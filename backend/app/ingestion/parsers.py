@@ -20,6 +20,8 @@ from docx import Document as WordDocument
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
 
+from app.ingestion.knowledge_quality import parse_front_matter
+
 
 @dataclass(frozen=True)
 class ParsedSection:
@@ -106,6 +108,9 @@ def extract_product_models(text: str) -> list[str]:
         提取到的所有不同产品型号列表，且自动去重并按字典序排列。
     """
     models: set[str] = set()
+    metadata, _body = parse_front_matter(text)
+    if model := metadata.get("型号", "").strip():
+        models.add(re.sub(r"\s+", " ", model).strip().lower())
     labels = ("小米", "红米", "Smart Band", "Robot Vacuum", "米家", "")
     for pattern, label in zip(PRODUCT_MODEL_PATTERNS, labels, strict=True):
         for match in pattern.findall(text):
