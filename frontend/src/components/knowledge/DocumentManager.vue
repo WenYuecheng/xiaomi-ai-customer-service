@@ -14,7 +14,12 @@ const chunks = shallowRef<DocumentChunk[]>([])
 const previewName = shallowRef('')
 const previewOpen = shallowRef(false)
 const busy = shallowRef(false)
-type UploadState = { progress: number; status: '校验中' | '上传中' | '处理中' | '成功' | '失败'; message: string }
+type UploadState = {
+  progress: number
+  status: '校验中' | '上传中' | '处理中' | '成功' | '失败'
+  message: string
+  jobId?: string
+}
 const uploadStates = reactive<Record<string, UploadState>>({})
 const config = reactive({ chunk_size: 800, chunk_overlap: 120, source_url: '' })
 let poller: number | undefined
@@ -30,6 +35,26 @@ async function load(): Promise<void> {
   documents.value = documentResponse.data.items
   const ids = new Set(documents.value.map((item) => item.id))
   jobs.value = jobResponse.data.items.filter((job) => ids.has(job.document_id))
+  syncUploadStates()
+}
+
+function syncUploadStates(): void {
+  for (const state of Object.values(uploadStates)) {
+    if (!state.jobId) continue
+    const job = jobs.value.find((item) => item.id === state.jobId)
+    if (!job) continue
+    if (job.status === 'succeeded') {
+      state.progress = 100
+      state.status = '成功'
+      state.message = '解析、切分和向量生成已完成'
+    } else if (job.status === 'failed' || job.status === 'cancelled') {
+      state.status = '失败'
+      state.message = job.error_message || (job.status === 'cancelled' ? '处理任务已取消' : '后台处理失败')
+    } else {
+      state.status = '处理中'
+      state.message = job.status === 'running' ? '正在解析、切分和生成向量' : '已进入处理队列'
+    }
+  }
 }
 
 async function processFiles(files: File[]): Promise<void> {
@@ -60,10 +85,15 @@ async function processFiles(files: File[]): Promise<void> {
       if (config.source_url.trim()) body.append('source_url', config.source_url.trim())
       uploadStates[file.name] = { progress: 0, status: '上传中', message: '正在安全上传' }
       try {
-        await api.post('/documents/upload', body, {
+        const response = await api.post<{ job_id: string }>('/documents/upload', body, {
           onUploadProgress: (progress) => { uploadStates[file.name].progress = progress.total ? Math.round(progress.loaded / progress.total * 100) : 0 },
         })
-        uploadStates[file.name] = { progress: 100, status: '处理中', message: '已进入处理队列' }
+        uploadStates[file.name] = {
+          progress: 100,
+          status: '处理中',
+          message: '已进入处理队列',
+          jobId: response.data.job_id,
+        }
         succeeded += 1
       } catch (error) {
         const responseMessage = (error as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message

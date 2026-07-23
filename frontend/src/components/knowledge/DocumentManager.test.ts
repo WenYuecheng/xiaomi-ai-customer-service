@@ -90,4 +90,49 @@ describe('DocumentManager uploads', () => {
     expect(wrapper.text()).toContain('good.txt')
     expect(wrapper.text()).toContain('已进入处理队列')
   })
+
+  it('updates a queued upload to success when the worker job completes', async () => {
+    mocks.post.mockResolvedValueOnce({ data: { job_id: 'job-pdf' } })
+    mocks.get.mockImplementation((url: string) => {
+      if (url === '/documents') {
+        return Promise.resolve({
+          data: {
+            items: [{
+              id: 'doc-pdf',
+              knowledge_base_id: 'kb-1',
+              original_filename: 'upload-verification.pdf',
+              status: 'ready',
+            }],
+          },
+        })
+      }
+      if (url === '/jobs') {
+        return Promise.resolve({
+          data: {
+            items: [{
+              id: 'job-pdf',
+              document_id: 'doc-pdf',
+              operation: 'ingest',
+              status: 'succeeded',
+              stage: 'completed',
+            }],
+          },
+        })
+      }
+      throw new Error(`unexpected GET ${url}`)
+    })
+    const wrapper = mountManager()
+    await flushPromises()
+    const input = wrapper.get<HTMLInputElement>('input[type="file"]')
+    Object.defineProperty(input.element, 'files', {
+      configurable: true,
+      value: [new File(['%PDF-1.3'], 'upload-verification.pdf', { type: 'application/pdf' })],
+    })
+
+    await input.trigger('change')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('成功')
+    expect(wrapper.text()).toContain('解析、切分和向量生成已完成')
+  })
 })
